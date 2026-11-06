@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct AqianClientApp: App {
+    @UIApplicationDelegateAdaptor(PushBridge.self) private var push
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -24,6 +26,7 @@ struct RootView: View {
 }
 
 struct SetupView: View {
+    @ObservedObject private var bridge = PushBridge.shared
     @Binding var gwURL: String
     @Binding var gwKey: String
     @State private var url = ""
@@ -53,6 +56,17 @@ struct SetupView: View {
                 TextField("phone_token", text: $key)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+            }
+            Section("推送（实验）") {
+                Button("申请通知权限") { bridge.ask() }
+                Text(bridge.status)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if !bridge.token.isEmpty {
+                    Text(bridge.token)
+                        .font(.system(size: 11, design: .monospaced))
+                        .textSelection(.enabled)
+                }
             }
             Section {
                 Button("保存") {

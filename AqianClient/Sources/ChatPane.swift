@@ -794,6 +794,7 @@ struct VoiceBubble: View {
     @State private var playing = false
     @State private var progress: Double = 0
     @State private var duration: Double = 0
+    @State private var elapsed: Double = 0
     @State private var failed = false
     @State private var observer: Any?
 
@@ -841,6 +842,7 @@ struct VoiceBubble: View {
     private var subtitle: String {
         if failed { return "放不出来" }
         if duration > 0 { return String(format: "%.0f″ / %.0f″", progress * duration, duration) }
+        if elapsed > 0 { return String(format: "%.0f″", elapsed) }
         return label
     }
 
@@ -859,14 +861,26 @@ struct VoiceBubble: View {
         let p = player ?? AVPlayer(url: url)
         player = p
         if p.currentItem?.status == .failed { failed = true; return }
-        duration = CMTimeGetSeconds(p.currentItem?.duration ?? .zero).isFinite
-            ? max(0, CMTimeGetSeconds(p.currentItem!.duration)) : 0
+        if duration <= 0 {
+            // v0.34：item.duration 刚建时是 0，得异步问资源要
+            Task {
+                let d = try? await AVURLAsset(url: url).load(.duration)
+                if let d = d, d.isNumeric {
+                    let sec = CMTimeGetSeconds(d)
+                    if sec.isFinite, sec > 0 { await MainActor.run { duration = sec } }
+                }
+            }
+        }
         p.play()
         playing = true
         observer = p.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { t in
             let sec = CMTimeGetSeconds(t)
-            if duration > 0, sec.isFinite { progress = min(1, sec / duration) }
-            if duration > 0, sec >= duration - 0.05 { stop() }
+            if sec.isFinite, sec >= 0 {
+                elapsed = sec
+                if duration > 0 { progress = min(1, sec / duration) }
+                else if sec < 20 { progress = min(1, sec / 20) }   // 时长还没到时先按 20 秒假装走
+                if duration > 0, sec >= duration - 0.05 { stop() }
+            }
         }
         NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime,
                                               object: p.currentItem, queue: .main) { _ in
@@ -883,6 +897,7 @@ struct VoiceBubble: View {
         if let o = observer { player?.removeTimeObserver(o); observer = nil }
         playing = false
         progress = 0
+        elapsed = 0
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 }

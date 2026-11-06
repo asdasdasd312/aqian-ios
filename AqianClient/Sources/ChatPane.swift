@@ -601,10 +601,26 @@ struct ChatPane: View {
         }
     }
 
+    /// 原图（5700×4300、四五兆）在这种链路上传一半就断，先缩到长边 2600。
+    /// 看图纸、看远处的字够用了；真要原图，走「文件」那条，不要走照片。
+    private func shrink(_ data: Data) -> Data {
+        guard let img = UIImage(data: data) else { return data }
+        let long = max(img.size.width, img.size.height)
+        guard long > 2600 else { return data }
+        let scale = 2600 / long
+        let size = CGSize(width: img.size.width * scale, height: img.size.height * scale)
+        let fmt = UIGraphicsImageRendererFormat.default()
+        fmt.scale = 1
+        let out = UIGraphicsImageRenderer(size: size, format: fmt).image { _ in
+            img.draw(in: CGRect(origin: .zero, size: size))
+        }
+        return out.jpegData(compressionQuality: 0.85) ?? data
+    }
+
     private func uploadData(_ data: Data, name: String) async {
         uploading = true
         do {
-            let path = try await api.upload(data, filename: name)
+            let path = try await api.upload(shrink(data), filename: name)
             attachPath = path
             withAnimation { toast = "图片待发送——接着打字就一起发" }
             attachTask?.cancel()

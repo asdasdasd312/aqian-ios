@@ -58,7 +58,7 @@ struct LampRootView: View {
     private func boot() async {
         loadError = nil
         do {
-            let list = try await API(url: gwURL, key: gwKey).sessions()
+            let list = try await API.shared.sessions()
             sessions = list
             guard !list.isEmpty else { return }
             if let pick = list.first(where: { $0.id == lastSession }) {

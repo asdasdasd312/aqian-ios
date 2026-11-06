@@ -4,6 +4,13 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 /// 一屏只有这一轮对话。我的话不带气泡（像从暗处说出来），他的话是一个很轻的圆角块。
+struct PendingMsg: Identifiable, Equatable {
+    let id = UUID()
+    let text: String
+    var attach: String = ""
+    var failed: Bool
+}
+
 struct ChatPane: View {
     @AppStorage("gw_url") private var gwURL = ""
     @AppStorage("gw_key") private var gwKey = ""
@@ -32,6 +39,9 @@ struct ChatPane: View {
     @State private var pickFile = false
     @State private var photoItem: PhotosPickerItem?
     @State private var uploading = false
+    @State private var pending: [PendingMsg] = []
+    @State private var attachPath = ""
+    @State private var attachTask: Task<Void, Never>?
     @State private var toast: String?
     @AppStorage("send_original") private var sendOriginal = true
 
@@ -83,6 +93,32 @@ struct ChatPane: View {
                             }
                             .id(m.t)
                         }
+                        ForEach(pending) { item in
+                            HStack(alignment: .center, spacing: 8) {
+                                Text(item.attach.isEmpty ? item.text : (item.text.isEmpty ? "（图片）" : "（图片）" + item.text))
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(.white.opacity(item.failed ? 0.55 : 0.75))
+                                    .padding(.vertical, 11).padding(.horizontal, 15)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                            .fill(Color.white.opacity(0.06))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                            .stroke(Color.red.opacity(item.failed ? 0.45 : 0), lineWidth: 1)
+                                    )
+                                if item.failed {
+                                    Button("重发") { Task { await resend(item) } }
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(Color(red: 0.95, green: 0.55, blue: 0.45))
+                                } else {
+                                    ProgressView().scaleEffect(0.6)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .padding(.top, 4)
+                        }
+
                         if typing {
                             HStack(spacing: 6) {
                                 ForEach(0..<3) { i in
@@ -487,18 +523,41 @@ struct ChatPane: View {
     private func send() async {
         let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty else { return }
-        sending = true
         draft = ""
+        attachTask?.cancel()
+        let attach = attachPath
+        attachPath = ""
+        let item = PendingMsg(text: body, attach: attach, failed: false)
+        withAnimation { pending.append(item) }
+        await deliver(item)
+    }
+
+    private func deliver(_ item: PendingMsg) async {
+        sending = true
         do {
-            try await api.send(body)
+            try await api.send(item.text, attach: item.attach)
+            withAnimation { pending.removeAll { $0.id == item.id } }
             await load()
             markSeen()
             error = nil
         } catch {
-            self.error = "没发出去：\(error.localizedDescription)"
-            draft = body
+            withAnimation { setFailed(item.id) }
+            error = "没发出去（点那条消息的「重发」）"
         }
         sending = false
+    }
+
+    private func setFailed(_ id: UUID) {
+        if let i = pending.firstIndex(where: { $0.id == id }) {
+            pending[i].failed = true
+        }
+    }
+
+    private func resend(_ item: PendingMsg) async {
+        if let i = pending.firstIndex(where: { $0.id == item.id }) {
+            pending[i].failed = false
+        }
+        await deliver(item)
     }
 
     private func uploadFile(_ url: URL) async {
@@ -513,11 +572,18 @@ struct ChatPane: View {
     private func uploadData(_ data: Data, name: String) async {
         uploading = true
         do {
-            _ = try await api.upload(data, filename: name)
-            withAnimation { toast = "发出去了：\(name)" }
-            Task {
-                try? await Task.sleep(nanoseconds: 2_200_000_000)
-                withAnimation { toast = nil }
+            let path = try await api.upload(data, filename: name)
+            attachPath = path
+            withAnimation { toast = "图片待发送——接着打字就一起发" }
+            attachTask?.cancel()
+            attachTask = Task {
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                if Task.isCancelled { return }
+                if !attachPath.isEmpty, draft.trimmingCharacters(in: .whitespaces).isEmpty {
+                    let only = attachPath
+                    attachPath = ""
+                    await deliver(PendingMsg(text: "", attach: only, failed: false))
+                }
             }
         } catch {
             withAnimation { toast = "没发出去：\(error.localizedDescription)" }

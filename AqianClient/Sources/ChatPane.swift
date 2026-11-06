@@ -20,6 +20,7 @@ struct ChatPane: View {
     @State private var sending = false
     @State private var error: String?
     @State private var presence: Presence?
+    @State private var voiceMode = false
     @State private var unread = 0
     @State private var showNote = false
     @State private var timer: Timer?
@@ -364,11 +365,26 @@ struct ChatPane: View {
             }
             .padding(.leading, 12)
 
-            Image(systemName: voice.recording ? "waveform" : "mic")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(voice.recording ? Color.red.opacity(0.9) : Color.white.opacity(voiceBusy ? 0.25 : 0.55))
-                .frame(width: 32, height: 34)
-                .contentShape(Rectangle())
+            Button {
+                voiceMode.toggle()
+            } label: {
+                Image(systemName: voiceMode ? "keyboard" : "mic")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(voiceBusy ? 0.25 : 0.55))
+                    .frame(width: 32, height: 34)
+                    .contentShape(Rectangle())
+            }
+
+            if voiceMode {
+                ZStack {
+                    Capsule()
+                        .fill(Color.white.opacity(voice.recording ? 0.16 : 0.08))
+                    Text(voice.recording ? "松开发送" : "按住 说话")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                .frame(height: 46)
+                .contentShape(Capsule())
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { _ in
@@ -378,13 +394,13 @@ struct ChatPane: View {
                             guard let data = voice.stop() else { return }
                             voiceBusy = true
                             Task {
-                                let text = (try? await api.voice(data)) ?? ""
+                                _ = try? await api.voice(data)
                                 voiceBusy = false
-                                if !text.isEmpty { await load() }
+                                await load()
                             }
                         }
                 )
-
+            } else {
             TextField("", text: $draft, axis: .vertical)
                 .lineLimit(1...4)
                 .font(.system(size: 16))
@@ -402,6 +418,8 @@ struct ChatPane: View {
                     }
                 }
 
+            }
+            if !voiceMode {
             Button(action: { Task { await send() } }) {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 15, weight: .semibold))
@@ -413,6 +431,7 @@ struct ChatPane: View {
             }
             .disabled(draft.isEmpty || sending)
             .padding(.trailing, 7)
+            }
         }
         .background(
             RoundedRectangle(cornerRadius: 26, style: .continuous)

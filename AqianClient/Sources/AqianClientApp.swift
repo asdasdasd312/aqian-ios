@@ -82,6 +82,13 @@ struct SetupView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            Section {
+                let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+                let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+                Text("版本 " + v + "（build " + b + "）")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
         .onAppear {
             // 装上就能用：预填当前的网关地址和口令（地址会变时在这里改）

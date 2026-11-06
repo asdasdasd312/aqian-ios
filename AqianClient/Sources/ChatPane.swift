@@ -296,8 +296,7 @@ struct ChatPane: View {
     }
 
     private func imagePathLines(_ text: String) -> [URL] {
-        text.split(separator: "
-").compactMap { imagePathURL(String($0)) }
+        text.split(separator: "\n").compactMap { imagePathURL(String($0)) }
     }
 
     private func stickerLines(_ text: String) -> [URL] {

@@ -346,14 +346,27 @@ struct ChatPane: View {
         return (url, secs.isEmpty ? "语音" : secs + "″")
     }
 
+    /// 我自己说的话也可以是语音：正文里一行 `[语音] D:\阿潜\声音\…wav`。
+    private func myVoiceURL(_ line: String) -> (URL, String)? {
+        let t = line.trimmingCharacters(in: .whitespaces)
+        guard t.hasPrefix("[语音]") else { return nil }
+        var path = String(t.dropFirst(4)).trimmingCharacters(in: .whitespaces)
+        if let paren = path.firstIndex(of: "（") { path = String(path[path.startIndex..<paren]) }
+        path = path.trimmingCharacters(in: .whitespaces)
+        guard path.count > 3, let url = fileURL(path) else { return nil }
+        return (url, "我的声音")
+    }
+
     private func voiceLines(_ text: String) -> [(URL, String)] {
-        text.split(separator: "\n").compactMap { voiceLineURL(String($0)) }
+        text.split(separator: "\n").compactMap {
+            voiceLineURL(String($0)) ?? myVoiceURL(String($0))
+        }
     }
 
     private func textWithoutStickers(_ text: String) -> String {
         text.split(separator: "\n")
             .filter { stickerURL(String($0)) == nil && imagePathURL(String($0)) == nil
-                      && voiceLineURL(String($0)) == nil }
+                      && voiceLineURL(String($0)) == nil && myVoiceURL(String($0)) == nil }
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }

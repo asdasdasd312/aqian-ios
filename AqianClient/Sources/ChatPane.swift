@@ -2,6 +2,9 @@ import SwiftUI
 
 /// 一屏只有这一轮对话。我的话不带气泡（像从暗处说出来），他的话是一个很轻的圆角块。
 struct ChatPane: View {
+    @AppStorage("gw_url") private var gwURL = ""
+    @AppStorage("gw_key") private var gwKey = ""
+    @State private var showSetup = false
     let session: SessionRow
     var onLongPressTitle: () -> Void
     var onPick: (SessionRow) -> Void
@@ -71,6 +74,9 @@ struct ChatPane: View {
             timer?.invalidate(); presenceTimer?.invalidate()
             markSeen()
         }
+        .sheet(isPresented: $showSetup) {
+            SetupView(gwURL: $gwURL, gwKey: $gwKey)
+        }
     }
 
     // MARK: - 顶栏
@@ -83,6 +89,7 @@ struct ChatPane: View {
                 .frame(width: 40, height: 40)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 0.5))
+                .onLongPressGesture(minimumDuration: 0.5) { showSetup = true }
 
             Button {
                 showNote = true

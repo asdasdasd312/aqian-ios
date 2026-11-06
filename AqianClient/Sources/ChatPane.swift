@@ -310,7 +310,35 @@ struct ChatPane: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// 「[手机] 发来一个文件：D:\…」这类是我这边收到东西的回执，
+    /// 把路径整条摊在他眼前很难看，换成一个小标签。
+    private func receiptTag(_ text: String) -> String? {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        guard t.hasPrefix("[手机] 发来") else { return nil }
+        if t.contains("照片") { return "照片 · 已收到" }
+        if t.contains("语音") { return "语音 · 已收到" }
+        return "文件 · 已收到"
+    }
+
     private func row(_ m: Msg) -> some View {
+        if let tag = receiptTag(m.text) {
+            HStack {
+                Spacer()
+                Text(tag)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(Capsule().fill(Color.white.opacity(0.06)))
+                Spacer()
+            }
+            .padding(.vertical, 2)
+        } else {
+            rowBody(m)
+        }
+    }
+
+    @ViewBuilder
+    private func rowBody(_ m: Msg) -> some View {
         HStack(alignment: .bottom, spacing: 0) {
             if m.isMe { Spacer(minLength: 56) }
             VStack(alignment: .leading, spacing: 8) {

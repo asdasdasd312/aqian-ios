@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import UniformTypeIdentifiers
 
 /// 一屏只有这一轮对话。我的话不带气泡（像从暗处说出来），他的话是一个很轻的圆角块。
 struct ChatPane: View {
@@ -21,6 +23,11 @@ struct ChatPane: View {
     @State private var linkDown = false
     @State private var failCount = 0
     @State private var justBack = false
+    @State private var pickPhoto = false
+    @State private var pickFile = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var uploading = false
+    @State private var toast: String?
 
     private var api: API { API.shared }
     private var seenKey: String { "seen." + session.id }
@@ -89,6 +96,32 @@ struct ChatPane: View {
         }
         .sheet(isPresented: $showSetup) {
             SetupView(gwURL: $gwURL, gwKey: $gwKey)
+        }
+        .photosPicker(isPresented: $pickPhoto, selection: $photoItem, matching: .images)
+        .fileImporter(isPresented: $pickFile, allowedContentTypes: [.data, .image, .pdf, .plainText],
+                      allowsMultipleSelection: false) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                Task { await uploadFile(url) }
+            }
+        }
+        .onChange(of: photoItem) { item in
+            guard let item else { return }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self) {
+                    await uploadData(data, name: "照片-\(Int(Date().timeIntervalSince1970)).jpg")
+                }
+                photoItem = nil
+            }
+        }
+        .overlay(alignment: .top) {
+            if let toast {
+                Text(toast)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .padding(.vertical, 6).padding(.horizontal, 14)
+                    .background(Capsule().fill(Color.white.opacity(0.08)))
+                    .padding(.top, 6)
+            }
         }
     }
 
@@ -193,19 +226,30 @@ struct ChatPane: View {
     // MARK: - 输入
 
     private var composer: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
+            Menu {
+                Button { pickPhoto = true } label: { Label("照片", systemImage: "photo") }
+                Button { pickFile = true } label: { Label("文件", systemImage: "doc") }
+            } label: {
+                Image(systemName: uploading ? "arrow.triangle.2.circlepath" : "plus")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .frame(width: 34, height: 34)
+            }
+            .padding(.leading, 12)
+
             TextField("", text: $draft, axis: .vertical)
                 .lineLimit(1...4)
                 .font(.system(size: 16))
                 .foregroundStyle(.white.opacity(0.9))
-                .padding(.leading, 20)
+                .padding(.leading, 6)
                 .padding(.vertical, 13)
                 .overlay(alignment: .topLeading) {
                     if draft.isEmpty {
                         Text("跟阿潜说…")
                             .font(.system(size: 16))
                             .foregroundStyle(.white.opacity(0.30))
-                            .padding(.leading, 20)
+                            .padding(.leading, 6)
                             .padding(.top, 13)
                             .allowsHitTesting(false)
                     }
@@ -286,6 +330,34 @@ struct ChatPane: View {
             draft = body
         }
         sending = false
+    }
+
+    private func uploadFile(_ url: URL) async {
+        let got = url.startAccessingSecurityScopedResource()
+        defer { if got { url.stopAccessingSecurityScopedResource() } }
+        let name = url.lastPathComponent
+        if let data = try? Data(contentsOf: url) {
+            await uploadData(data, name: name)
+        }
+    }
+
+    private func uploadData(_ data: Data, name: String) async {
+        uploading = true
+        do {
+            _ = try await api.upload(data, filename: name)
+            withAnimation { toast = "发出去了：\(name)" }
+            Task {
+                try? await Task.sleep(nanoseconds: 2_200_000_000)
+                withAnimation { toast = nil }
+            }
+        } catch {
+            withAnimation { toast = "没发出去：\(error.localizedDescription)" }
+            Task {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                withAnimation { toast = nil }
+            }
+        }
+        uploading = false
     }
 
     private func startPolling() {

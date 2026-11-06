@@ -11,10 +11,21 @@ struct SessionRow: Decodable, Identifiable {
     let busy: Bool
 }
 
+struct AskQuestion: Decodable, Identifiable {
+    let q: String
+    let options: [String]
+    var id: String { q }
+}
+
+struct AskBox: Decodable {
+    let questions: [AskQuestion]
+}
+
 struct Msg: Decodable, Identifiable {
     let t: Double
     let role: String
     let text: String
+    let ask: AskBox?
     var id: Double { t }
     var isMe: Bool { role == "user" }
 }

@@ -10,9 +10,15 @@ struct ChatPane: View {
     @State private var draft = ""
     @State private var sending = false
     @State private var error: String?
+    @State private var presence: Presence?
+    @State private var unread = 0
+    @State private var showNote = false
     @State private var timer: Timer?
+    @State private var presenceTimer: Timer?
 
     private var api: API { API.shared }
+    private var seenKey: String { "seen." + session.id }
+    private var seenAt: Double { UserDefaults.standard.double(forKey: seenKey) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,10 +26,24 @@ struct ChatPane: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 26) {
+                        if unread > 0 {
+                            Button {
+                                if let first = msgs.first(where: { $0.t > seenAt }) {
+                                    withAnimation { proxy.scrollTo(first.t, anchor: .top) }
+                                }
+                            } label: {
+                                Text("上次之后 \(unread) 条")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.white.opacity(0.45))
+                                    .padding(.vertical, 5).padding(.horizontal, 12)
+                                    .background(Capsule().fill(Color.white.opacity(0.05)))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
                         ForEach(msgs) { m in row(m).id(m.t) }
                     }
                     .padding(.horizontal, 24)
-                    .padding(.top, 18)
+                    .padding(.top, 14)
                     .padding(.bottom, 12)
                 }
                 .scrollDismissesKeyboard(.interactively)
@@ -42,32 +62,78 @@ struct ChatPane: View {
             composer
         }
         .task {
-            await load()
+            await load(first: true)
+            markSeen()
             startPolling()
+            startPresence()
         }
-        .onDisappear { timer?.invalidate() }
+        .onDisappear {
+            timer?.invalidate(); presenceTimer?.invalidate()
+            markSeen()
+        }
     }
 
     // MARK: - 顶栏
 
     private var header: some View {
-        HStack {
-            HStack(spacing: 7) {
-                Circle().fill(Color(red: 0.47, green: 0.75, blue: 0.59)).frame(width: 6, height: 6)
-                Text("阿潜").font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.55))
+        HStack(spacing: 10) {
+            Image("Avatar")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 26, height: 26)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 0.5))
+
+            Button {
+                showNote = true
+            } label: {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(dotColor)
+                        .frame(width: 6, height: 6)
+                        .opacity(presence?.state == "busy" ? 0.65 : 1)
+                    Text("阿潜").font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
             }
+            .buttonStyle(.plain)
+
             Spacer()
             Text(timeLabel).font(.system(size: 12))
                 .foregroundStyle(.white.opacity(0.28))
             Spacer()
-            Color.clear.frame(width: 34, height: 1)
+            Color.clear.frame(width: 26, height: 1)
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, 20)
         .padding(.top, 6)
         .padding(.bottom, 10)
         .contentShape(Rectangle())
         .onLongPressGesture(minimumDuration: 0.45) { onLongPressTitle() }
+        .alert("阿潜", isPresented: $showNote) {
+            Button("知道了", role: .cancel) {}
+        } message: {
+            Text(noteText)
+        }
+    }
+
+    private var dotColor: Color {
+        switch presence?.state ?? "idle" {
+        case "busy":  return Color(red: 0.95, green: 0.75, blue: 0.42)
+        case "away":  return Color(red: 0.45, green: 0.47, blue: 0.52)
+        default:      return Color(red: 0.47, green: 0.75, blue: 0.59)
+        }
+    }
+
+    private var noteText: String {
+        guard let p = presence else { return "还没问到。" }
+        var s: String
+        switch p.state {
+        case "busy": s = "在，正忙着。"
+        case "away": s = "不在——电脑那边已经 \(max(1, p.idle_seconds / 60)) 分钟没动静了。"
+        default:     s = "在，暂时空着。"
+        }
+        if !p.note.isEmpty { s += "\n\n" + p.note }
+        return s
     }
 
     private var timeLabel: String {
@@ -152,11 +218,21 @@ struct ChatPane: View {
 
     // MARK: - 数据
 
-    private func load() async {
+    private func load(first: Bool = false) async {
         do {
-            msgs = try await api.messages(id: session.id, limit: 80)
+            let fresh = try await api.messages(id: session.id, limit: 80)
+            if first {
+                unread = fresh.filter { $0.t > seenAt }.count
+            }
+            msgs = fresh
         } catch {
             self.error = "读不到消息：\(error.localizedDescription)"
+        }
+    }
+
+    private func markSeen() {
+        if let last = msgs.last {
+            UserDefaults.standard.set(last.t, forKey: seenKey)
         }
     }
 
@@ -168,6 +244,7 @@ struct ChatPane: View {
         do {
             try await api.send(body)
             await load()
+            markSeen()
             error = nil
         } catch {
             self.error = "没发出去：\(error.localizedDescription)"
@@ -181,5 +258,13 @@ struct ChatPane: View {
         timer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { _ in
             Task { await load() }
         }
+    }
+
+    private func startPresence() {
+        presenceTimer?.invalidate()
+        presenceTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
+            Task { presence = try? await api.presence() }
+        }
+        Task { presence = try? await api.presence() }
     }
 }

@@ -33,9 +33,11 @@ final class API {
         UserDefaults.standard.string(forKey: "gw_key") ?? ""
     }
 
-    private func request(_ path: String, method: String = "GET", body: Data? = nil) -> URLRequest? {
+    private func request(_ path: String, query: [URLQueryItem] = [],
+                         method: String = "GET", body: Data? = nil) -> URLRequest? {
         guard var c = URLComponents(string: base.trimmingCharacters(in: .whitespaces)) else { return nil }
         c.path = path
+        if !query.isEmpty { c.queryItems = query }
         guard let url = c.url else { return nil }
         var r = URLRequest(url: url)
         r.httpMethod = method
@@ -55,7 +57,10 @@ final class API {
     }
 
     func messages(id: String, limit: Int = 60) async throws -> [Msg] {
-        guard let req = request("/api/messages?id=\(id)&limit=\(limit)") else { throw URLError(.badURL) }
+        guard let req = request("/api/messages",
+                                query: [URLQueryItem(name: "id", value: id),
+                                        URLQueryItem(name: "limit", value: String(limit))])
+        else { throw URLError(.badURL) }
         let (data, _) = try await URLSession.shared.data(for: req)
         return try JSONDecoder().decode(MessagesResp.self, from: data).messages
     }

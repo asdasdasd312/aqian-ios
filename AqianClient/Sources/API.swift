@@ -109,23 +109,36 @@ final class API {
     }
 
     func upload(_ data: Data, filename: String) async throws -> String {
-        guard var c = URLComponents(string: base.trimmingCharacters(in: .whitespaces)) else {
-            throw URLError(.badURL)
+        let upid = UUID().uuidString
+        var lastError: Error = URLError(.unknown)
+        for attempt in 1...2 {
+            do {
+                guard var c = URLComponents(string: base.trimmingCharacters(in: .whitespaces)) else {
+                    throw URLError(.badURL)
+                }
+                c.path = "/api/upload"
+                guard let url = c.url else { throw URLError(.badURL) }
+                var req = URLRequest(url: url)
+                req.httpMethod = "POST"
+                req.timeoutInterval = 120
+                req.setValue(key, forHTTPHeaderField: "X-Aqian-Key")
+                req.setValue(filename.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "file",
+                             forHTTPHeaderField: "X-Filename")
+                req.setValue(upid, forHTTPHeaderField: "X-Upload-Id")
+                req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+                let (resp, _) = try await URLSession.shared.upload(for: req, from: data)
+                guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+                    throw URLError(.badServerResponse)
+                }
+                return "ok"
+            } catch {
+                lastError = error
+                if attempt == 1 {
+                    try? await Task.sleep(nanoseconds: 700_000_000)
+                }
+            }
         }
-        c.path = "/api/upload"
-        guard let url = c.url else { throw URLError(.badURL) }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.timeoutInterval = 120
-        req.setValue(key, forHTTPHeaderField: "X-Aqian-Key")
-        req.setValue(filename.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "file",
-                     forHTTPHeaderField: "X-Filename")
-        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        let (resp, _) = try await URLSession.shared.upload(for: req, from: data)
-        guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
-            throw URLError(.badServerResponse)
-        }
-        return "ok"
+        throw lastError
     }
 
     func send(_ text: String) async throws {

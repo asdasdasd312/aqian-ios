@@ -101,6 +101,13 @@ final class API {
         try JSONDecoder().decode(Presence.self, from: await get("/api/presence"))
     }
 
+    func registerPush(_ token: String) async throws {
+        let payload = try JSONSerialization.data(withJSONObject: ["token": token, "env": "production"])
+        guard let req = request("/api/push/register", method: "POST", body: payload) else { throw URLError(.badURL) }
+        let (data, _) = try await URLSession.shared.data(for: req)
+        _ = try? JSONDecoder().decode(OkResp.self, from: data)
+    }
+
     func send(_ text: String) async throws {
         let payload = try JSONSerialization.data(withJSONObject: ["text": text])
         guard let req = request("/api/send", method: "POST", body: payload) else { throw URLError(.badURL) }

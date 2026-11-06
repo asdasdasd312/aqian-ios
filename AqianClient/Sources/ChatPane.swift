@@ -43,6 +43,7 @@ struct ChatPane: View {
     @State private var attachPath = ""
     @State private var attachTask: Task<Void, Never>?
     @State private var toast: String?
+    @State private var toastTask: Task<Void, Never>?
     @AppStorage("send_original") private var sendOriginal = true
 
     private var api: API { API.shared }
@@ -646,36 +647,36 @@ struct ChatPane: View {
         return out.jpegData(compressionQuality: 0.85) ?? data
     }
 
+    private func showToast(_ text: String?, seconds: Double = 3.0) {
+        toastTask?.cancel()
+        withAnimation { toast = text }
+        guard text != nil, seconds > 0 else { return }
+        toastTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            if Task.isCancelled { return }
+            withAnimation { toast = nil }
+        }
+    }
+
     private func uploadData(_ data: Data, name: String) async {
         uploading = true
         do {
             let path = try await api.upload(shrink(data), filename: name)
             attachPath = path
-            withAnimation { toast = "图片待发送——接着打字就一起发" }
+            showToast("图片已带上 · 接着打字就一起发", seconds: 3.0)
             attachTask?.cancel()
-            // 提示只留一会儿：之前这条一直挂在顶上不消失
-            Task {
-                try? await Task.sleep(nanoseconds: 3_500_000_000)
-                if !attachPath.isEmpty {
-                    withAnimation { toast = nil }
-                }
-            }
             attachTask = Task {
                 try? await Task.sleep(nanoseconds: 6_000_000_000)
                 if Task.isCancelled { return }
                 if !attachPath.isEmpty, draft.trimmingCharacters(in: .whitespaces).isEmpty {
                     let only = attachPath
                     attachPath = ""
-                    withAnimation { toast = nil }
+                    showToast(nil)
                     await deliver(PendingMsg(text: "", attach: only, failed: false))
                 }
             }
         } catch {
-            withAnimation { toast = "没发出去：\(error.localizedDescription)" }
-            Task {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                withAnimation { toast = nil }
-            }
+            showToast("没发出去：" + error.localizedDescription, seconds: 4.0)
         }
         uploading = false
     }

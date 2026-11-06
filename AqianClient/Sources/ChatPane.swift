@@ -64,7 +64,13 @@ struct ChatPane: View {
                             }
                             .frame(maxWidth: .infinity)
                         }
-                        ForEach(msgs) { m in row(m).id(m.t) }
+                        ForEach(msgs) { m in
+                            VStack(alignment: .leading, spacing: 0) {
+                                row(m)
+                                if !m.isMe { askBox(m) }
+                            }
+                            .id(m.t)
+                        }
                     }
                     .padding(.horizontal, 24)
                     .padding(.top, 14)
@@ -222,6 +228,41 @@ struct ChatPane: View {
                     }
                 )
             if !m.isMe { Spacer(minLength: 40) }
+        }
+    }
+
+    /// 我在等他选的时候，手机上要能直接点——不是只看到一句「问你个事」
+    @ViewBuilder
+    private func askBox(_ m: Msg) -> some View {
+        if let ask = m.ask {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(ask.questions) { q in
+                    if !q.q.isEmpty {
+                        Text(q.q)
+                            .font(.system(size: 15))
+                            .foregroundStyle(Color.white.opacity(0.72))
+                            .padding(.top, 2)
+                    }
+                    ForEach(q.options, id: \.self) { opt in
+                        Button {
+                            send(opt)
+                        } label: {
+                            Text(opt)
+                                .font(.system(size: 15, weight: .medium))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 9)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                                )
+                                .foregroundStyle(Color.white.opacity(0.9))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.top, 10)
+            .padding(.leading, 2)
         }
     }
 

@@ -320,6 +320,7 @@ struct ChatPane: View {
         return "文件 · 已收到"
     }
 
+    @ViewBuilder
     private func row(_ m: Msg) -> some View {
         if let tag = receiptTag(m.text) {
             HStack {

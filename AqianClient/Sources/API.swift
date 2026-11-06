@@ -171,6 +171,26 @@ final class API {
         throw lastError
     }
 
+    /// 语音：把 m4a 丢给网关，网关转成字再进会话
+    func voice(_ data: Data) async throws -> String {
+        guard var c = URLComponents(string: base.trimmingCharacters(in: .whitespaces)) else {
+            throw URLError(.badURL)
+        }
+        c.path = "/api/voice"
+        guard let url = c.url else { throw URLError(.badURL) }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 180
+        req.setValue(key, forHTTPHeaderField: "X-Aqian-Key")
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        let (resp, data2) = try await URLSession.shared.upload(for: req, from: data)
+        guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
+        struct R: Decodable { let ok: Bool; let text: String? }
+        return (try? JSONDecoder().decode(R.self, from: data2).text) ?? ""
+    }
+
     func send(_ text: String) async throws {
         let payload = try JSONSerialization.data(withJSONObject: ["text": text])
         guard let req = request("/api/send", method: "POST", body: payload) else { throw URLError(.badURL) }

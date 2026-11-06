@@ -108,6 +108,26 @@ final class API {
         _ = try? JSONDecoder().decode(OkResp.self, from: data)
     }
 
+    func upload(_ data: Data, filename: String) async throws -> String {
+        guard var c = URLComponents(string: base.trimmingCharacters(in: .whitespaces)) else {
+            throw URLError(.badURL)
+        }
+        c.path = "/api/upload"
+        guard let url = c.url else { throw URLError(.badURL) }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 120
+        req.setValue(key, forHTTPHeaderField: "X-Aqian-Key")
+        req.setValue(filename.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "file",
+                     forHTTPHeaderField: "X-Filename")
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        let (resp, _) = try await URLSession.shared.upload(for: req, from: data)
+        guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
+        return "ok"
+    }
+
     func send(_ text: String) async throws {
         let payload = try JSONSerialization.data(withJSONObject: ["text": text])
         guard let req = request("/api/send", method: "POST", body: payload) else { throw URLError(.badURL) }

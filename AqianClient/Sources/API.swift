@@ -31,6 +31,17 @@ struct Msg: Decodable, Identifiable {
 }
 
 struct SessionsResp: Decodable { let sessions: [SessionRow] }
+
+struct Hit: Decodable, Identifiable {
+    let sid: String
+    let title: String
+    let t: Double
+    let role: String
+    let text: String
+    var id: String { sid + "-" + String(t) }
+}
+
+struct SearchResp: Decodable { let ok: Bool; let hits: [Hit] }
 struct MessagesResp: Decodable {
     let messages: [Msg]
     let typing: Bool?
@@ -83,6 +94,11 @@ final class API {
 
     func sessions() async throws -> [SessionRow] {
         try JSONDecoder().decode(SessionsResp.self, from: await get("/api/sessions")).sessions
+    }
+
+    func search(_ q: String) async throws -> [Hit] {
+        let data = try await get("/api/search", query: [URLQueryItem(name: "q", value: q)])
+        return try JSONDecoder().decode(SearchResp.self, from: data).hits
     }
 
     func messages(id: String, limit: Int = 60) async throws -> MessagesResp {

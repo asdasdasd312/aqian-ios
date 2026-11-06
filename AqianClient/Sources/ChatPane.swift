@@ -296,6 +296,30 @@ struct ChatPane: View {
         return comps.url
     }
 
+    /// 任意绝对路径 → 网关 /api/file 的 URL（用于显示他发来的照片）
+    private func fileURL(_ path: String) -> URL? {
+        let base = (UserDefaults.standard.string(forKey: "gw_url") ?? "").trimmingCharacters(in: .whitespaces)
+        let key = UserDefaults.standard.string(forKey: "gw_key") ?? ""
+        guard !base.isEmpty, path.count > 3,
+              var comps = URLComponents(string: base + "/api/file") else { return nil }
+        comps.queryItems = [URLQueryItem(name: "path", value: path),
+                            URLQueryItem(name: "k", value: key)]
+        return comps.url
+    }
+
+    /// 「[手机] 发来一张照片：D:\…」里把路径抠出来
+    private func receiptPath(_ text: String) -> String? {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        guard t.hasPrefix("[手机] 发来") else { return nil }
+        let parts = t.split(separator: "：", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return nil }
+        let path = String(parts[1]).trimmingCharacters(in: .whitespaces)
+        let lower = path.lowercased()
+        let imageExts = [".jpg", ".jpeg", ".png", ".heic", ".webp", ".gif"]
+        guard imageExts.contains(where: { lower.hasSuffix($0) }) else { return nil }
+        return path
+    }
+
     private func imagePathLines(_ text: String) -> [URL] {
         text.split(separator: "\n").compactMap { imagePathURL(String($0)) }
     }
@@ -323,7 +347,30 @@ struct ChatPane: View {
 
     @ViewBuilder
     private func row(_ m: Msg) -> some View {
-        if let tag = receiptTag(m.text) {
+        if let tag = receiptTag(m.text), let path = receiptPath(m.text), let url = fileURL(path) {
+            VStack(alignment: .trailing, spacing: 4) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img.resizable().scaledToFit()
+                            .frame(maxWidth: 200, maxHeight: 260)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    case .failure:
+                        Text("[图] 没取到").font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.4))
+                    default:
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.white.opacity(0.06))
+                            .frame(width: 160, height: 200)
+                    }
+                }
+                Text(tag)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.vertical, 2)
+        } else if let tag = receiptTag(m.text) {
             HStack {
                 Spacer()
                 Text(tag)

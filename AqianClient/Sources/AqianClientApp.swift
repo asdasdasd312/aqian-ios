@@ -18,7 +18,7 @@ struct RootView: View {
         if gwURL.isEmpty || gwKey.isEmpty {
             SetupView(gwURL: $gwURL, gwKey: $gwKey)
         } else {
-            SessionListView()
+            LampRootView()
         }
     }
 }

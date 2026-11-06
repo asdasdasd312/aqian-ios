@@ -12,8 +12,7 @@ struct ChatPane: View {
     @State private var error: String?
     @State private var timer: Timer?
 
-    private var api: API { API(url: UserDefaults.standard.string(forKey: "gw_url") ?? "",
-                               key: UserDefaults.standard.string(forKey: "gw_key") ?? "") }
+    private var api: API { API.shared }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -167,7 +166,7 @@ struct ChatPane: View {
         sending = true
         draft = ""
         do {
-            try await api.send(text: body)
+            try await api.send(body)
             await load()
             error = nil
         } catch {

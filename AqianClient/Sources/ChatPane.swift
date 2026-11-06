@@ -13,6 +13,8 @@ struct ChatPane: View {
 
     @State private var msgs: [Msg] = []
     @State private var typing = false
+    @StateObject private var voice = VoiceRecorder()
+    @State private var voiceBusy = false
     @State private var draft = ""
     @State private var sending = false
     @State private var error: String?
@@ -323,6 +325,27 @@ struct ChatPane: View {
                     .frame(width: 34, height: 34)
             }
             .padding(.leading, 12)
+
+            Image(systemName: voice.recording ? "waveform" : "mic")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(voice.recording ? Color.red.opacity(0.9) : Color.white.opacity(voiceBusy ? 0.25 : 0.55))
+                .frame(width: 32, height: 34)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { _ in
+                            if !voice.recording && !voiceBusy { voice.start() }
+                        }
+                        .onEnded { _ in
+                            guard let data = voice.stop() else { return }
+                            voiceBusy = true
+                            Task {
+                                let text = (try? await api.voice(data)) ?? ""
+                                voiceBusy = false
+                                if !text.isEmpty { await load() }
+                            }
+                        }
+                )
 
             TextField("", text: $draft, axis: .vertical)
                 .lineLimit(1...4)

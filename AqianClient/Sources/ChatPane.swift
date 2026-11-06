@@ -28,6 +28,7 @@ struct ChatPane: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var uploading = false
     @State private var toast: String?
+    @AppStorage("send_original") private var sendOriginal = true
 
     private var api: API { API.shared }
     private var seenKey: String { "seen." + session.id }
@@ -97,7 +98,8 @@ struct ChatPane: View {
         .sheet(isPresented: $showSetup) {
             SetupView(gwURL: $gwURL, gwKey: $gwKey)
         }
-        .photosPicker(isPresented: $pickPhoto, selection: $photoItem, matching: .images)
+        .photosPicker(isPresented: $pickPhoto, selection: $photoItem, matching: .images,
+                      preferredItemEncoding: sendOriginal ? .current : .automatic)
         .fileImporter(isPresented: $pickFile, allowedContentTypes: [.data, .image, .pdf, .plainText],
                       allowsMultipleSelection: false) { result in
             if case .success(let urls) = result, let url = urls.first {
@@ -228,8 +230,9 @@ struct ChatPane: View {
     private var composer: some View {
         HStack(spacing: 10) {
             Menu {
-                Button { pickPhoto = true } label: { Label("照片", systemImage: "photo") }
+                Button { pickPhoto = true } label: { Label(sendOriginal ? "照片（原图）" : "照片", systemImage: "photo") }
                 Button { pickFile = true } label: { Label("文件", systemImage: "doc") }
+                Toggle("发原图", isOn: $sendOriginal)
             } label: {
                 Image(systemName: uploading ? "arrow.triangle.2.circlepath" : "plus")
                     .font(.system(size: 15, weight: .semibold))

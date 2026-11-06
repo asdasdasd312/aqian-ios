@@ -27,12 +27,24 @@ struct SetupView: View {
     @Binding var gwURL: String
     @Binding var gwKey: String
     @State private var url = ""
+    @State private var url2 = ""
+    @State private var url3 = ""
     @State private var key = ""
 
     var body: some View {
         Form {
             Section("网关地址") {
                 TextField("https://…trycloudflare.com", text: $url)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+            }
+            Section("备用地址（可不填）") {
+                TextField("第二个地址", text: $url2)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                TextField("第三个地址", text: $url3)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
@@ -46,6 +58,8 @@ struct SetupView: View {
                 Button("保存") {
                     gwURL = url.trimmingCharacters(in: .whitespaces)
                     gwKey = key.trimmingCharacters(in: .whitespaces)
+                    UserDefaults.standard.set(url2.trimmingCharacters(in: .whitespaces), forKey: "gw_url2")
+                    UserDefaults.standard.set(url3.trimmingCharacters(in: .whitespaces), forKey: "gw_url3")
                 }
                 .disabled(url.isEmpty || key.isEmpty)
             }
@@ -64,6 +78,8 @@ struct SetupView: View {
                 url = gwURL
                 key = gwKey
             }
+            url2 = UserDefaults.standard.string(forKey: "gw_url2") ?? ""
+            url3 = UserDefaults.standard.string(forKey: "gw_url3") ?? ""
         }
     }
 }

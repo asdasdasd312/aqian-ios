@@ -231,26 +231,63 @@ struct ChatPane: View {
 
     // MARK: - 一行话
 
+    /// 消息里的表情包是 `![名字](http://127.0.0.1:57936/.../hash.gif)`，
+    /// 手机上 127.0.0.1 指的是它自己，所以这里把地址换到网关的 /sticker/。
+    private func stickerURL(_ line: String) -> URL? {
+        guard line.hasPrefix("!["), let open = line.range(of: "]("),
+              let close = line.range(of: ")", options: .backwards) else { return nil }
+        let raw = String(line[open.upperBound..<close.lowerBound])
+        guard let hash = raw.split(separator: "/").last else { return nil }
+        let base = (UserDefaults.standard.string(forKey: "gw_url") ?? "").trimmingCharacters(in: .whitespaces)
+        guard !base.isEmpty else { return nil }
+        return URL(string: base + "/sticker/" + hash)
+    }
+
+    private func stickerLines(_ text: String) -> [URL] {
+        text.split(separator: "\n").compactMap { stickerURL(String($0)) }
+    }
+
+    private func textWithoutStickers(_ text: String) -> String {
+        text.split(separator: "\n")
+            .filter { stickerURL(String($0)) == nil }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func row(_ m: Msg) -> some View {
         HStack(alignment: .bottom, spacing: 0) {
             if m.isMe { Spacer(minLength: 56) }
-            Text(m.text)
-                .font(.system(size: 17))
-                .lineSpacing(6)
-                .foregroundStyle(m.isMe ? Color.white.opacity(0.88) : Color.white.opacity(0.92))
-                .textSelection(.enabled)
-                .padding(.horizontal, m.isMe ? 16 : 0)
-                .padding(.vertical, m.isMe ? 11 : 0)
-                .background(
-                    Group {
-                        if m.isMe {
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(Color(red: 0.13, green: 0.16, blue: 0.23))
+            VStack(alignment: .leading, spacing: 8) {
+                let body = textWithoutStickers(m.text)
+                if !body.isEmpty {
+                    Text(body)
+                        .font(.system(size: 17))
+                        .lineSpacing(6)
+                        .foregroundStyle(m.isMe ? Color.white.opacity(0.88) : Color.white.opacity(0.92))
+                        .textSelection(.enabled)
+                        .padding(.horizontal, m.isMe ? 16 : 0)
+                        .padding(.vertical, m.isMe ? 11 : 0)
+                        .background(
+                            Group {
+                                if m.isMe {
+                                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                        .fill(Color(red: 0.13, green: 0.16, blue: 0.23))
+                                } else {
+                                    Color.clear
+                                }
+                            }
+                        )
+                }
+                ForEach(stickerLines(m.text), id: \.absoluteString) { url in
+                    AsyncImage(url: url) { phase in
+                        if let img = phase.image {
+                            img.resizable().scaledToFit().frame(maxWidth: 132, maxHeight: 132)
                         } else {
-                            Color.clear
+                            ProgressView().frame(width: 56, height: 56)
                         }
                     }
-                )
+                }
+            }
             if !m.isMe { Spacer(minLength: 40) }
         }
     }

@@ -7,9 +7,26 @@ struct SessionListView: View {
     @State private var rows: [SessionRow] = []
     @State private var error: String?
     @State private var loading = true
+    @State private var query = ""
+    @State private var hits: [Hit] = []
 
     var body: some View {
         List {
+            Section {
+                TextField("找一句话", text: $query)
+                    .textInputAutocapitalization(.never)
+                    .onSubmit { Task { await runSearch() } }
+            }
+            if !hits.isEmpty {
+                Section("搜到 \(hits.count) 条") {
+                    ForEach(hits) { h in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(h.text).font(.subheadline).lineLimit(2)
+                            Text(h.title).font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
             if let error {
                 Text(error).font(.footnote).foregroundStyle(.red)
             }
@@ -43,6 +60,12 @@ struct SessionListView: View {
                 } label: { Image(systemName: "arrow.clockwise") }
             }
         }
+    }
+
+    private func runSearch() async {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if q.count < 2 { hits = []; return }
+        hits = (try? await API.shared.search(q)) ?? []
     }
 
     private func load() async {

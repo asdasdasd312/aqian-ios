@@ -280,13 +280,33 @@ struct ChatPane: View {
         return URL(string: base + "/sticker/" + hash)
     }
 
+    /// 我要给他看一张图时，正文里会写一行 `[图] D:\阿潜\画-xxx.jpg`。
+    /// 手机上那个路径没有意义，换成网关的 /api/file 去取。
+    private func imagePathURL(_ line: String) -> URL? {
+        let t = line.trimmingCharacters(in: .whitespaces)
+        guard t.hasPrefix("[图]") else { return nil }
+        let path = String(t.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+        guard path.count > 3 else { return nil }
+        let base = (UserDefaults.standard.string(forKey: "gw_url") ?? "").trimmingCharacters(in: .whitespaces)
+        let key = UserDefaults.standard.string(forKey: "gw_key") ?? ""
+        guard !base.isEmpty, var comps = URLComponents(string: base + "/api/file") else { return nil }
+        comps.queryItems = [URLQueryItem(name: "path", value: path),
+                            URLQueryItem(name: "k", value: key)]
+        return comps.url
+    }
+
+    private func imagePathLines(_ text: String) -> [URL] {
+        text.split(separator: "
+").compactMap { imagePathURL(String($0)) }
+    }
+
     private func stickerLines(_ text: String) -> [URL] {
         text.split(separator: "\n").compactMap { stickerURL(String($0)) }
     }
 
     private func textWithoutStickers(_ text: String) -> String {
         text.split(separator: "\n")
-            .filter { stickerURL(String($0)) == nil }
+            .filter { stickerURL(String($0)) == nil && imagePathURL(String($0)) == nil }
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -314,6 +334,19 @@ struct ChatPane: View {
                                 }
                             }
                         )
+                }
+                ForEach(imagePathLines(m.text), id: \.absoluteString) { url in
+                    AsyncImage(url: url) { phase in
+                        if let img = phase.image {
+                            img.resizable().scaledToFit()
+                                .frame(maxWidth: 240, maxHeight: 320)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        } else if phase.error != nil {
+                            Text("[图] 没取到").font(.system(size: 13)).foregroundStyle(.secondary)
+                        } else {
+                            ProgressView().frame(width: 120, height: 120)
+                        }
+                    }
                 }
                 ForEach(stickerLines(m.text), id: \.absoluteString) { url in
                     AsyncImage(url: url) { phase in

@@ -183,7 +183,7 @@ final class API {
         req.timeoutInterval = 180
         req.setValue(key, forHTTPHeaderField: "X-Aqian-Key")
         req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        let (resp, data2) = try await URLSession.shared.upload(for: req, from: data)
+        let (data2, resp) = try await URLSession.shared.upload(for: req, from: data)
         guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
             throw URLError(.badServerResponse)
         }

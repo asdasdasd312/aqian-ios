@@ -539,10 +539,10 @@ struct ChatPane: View {
             withAnimation { pending.removeAll { $0.id == item.id } }
             await load()
             markSeen()
-            error = nil
+            self.error = nil
         } catch {
             withAnimation { setFailed(item.id) }
-            error = "没发出去（点那条消息的「重发」）"
+            self.error = "没发出去（点那条消息的「重发」）"
         }
         sending = false
     }

@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 struct PendingMsg: Identifiable, Equatable {
     let id = UUID()
     let text: String
+    var attach: String = ""
     var failed: Bool
 }
 
@@ -39,6 +40,8 @@ struct ChatPane: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var uploading = false
     @State private var pending: [PendingMsg] = []
+    @State private var attachPath = ""
+    @State private var attachTask: Task<Void, Never>?
     @State private var toast: String?
     @AppStorage("send_original") private var sendOriginal = true
 
@@ -92,7 +95,7 @@ struct ChatPane: View {
                         }
                         ForEach(pending) { item in
                             HStack(alignment: .center, spacing: 8) {
-                                Text(item.text)
+                                Text(item.attach.isEmpty ? item.text : (item.text.isEmpty ? "（图片）" : "（图片）" + item.text))
                                     .font(.system(size: 16))
                                     .foregroundStyle(.white.opacity(item.failed ? 0.55 : 0.75))
                                     .padding(.vertical, 11).padding(.horizontal, 15)
@@ -521,7 +524,10 @@ struct ChatPane: View {
         let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty else { return }
         draft = ""
-        let item = PendingMsg(text: body, failed: false)
+        attachTask?.cancel()
+        let attach = attachPath
+        attachPath = ""
+        let item = PendingMsg(text: body, attach: attach, failed: false)
         withAnimation { pending.append(item) }
         await deliver(item)
     }
@@ -529,7 +535,7 @@ struct ChatPane: View {
     private func deliver(_ item: PendingMsg) async {
         sending = true
         do {
-            try await api.send(item.text)
+            try await api.send(item.text, attach: item.attach)
             withAnimation { pending.removeAll { $0.id == item.id } }
             await load()
             markSeen()
@@ -566,11 +572,18 @@ struct ChatPane: View {
     private func uploadData(_ data: Data, name: String) async {
         uploading = true
         do {
-            _ = try await api.upload(data, filename: name)
-            withAnimation { toast = "发出去了：\(name)" }
-            Task {
-                try? await Task.sleep(nanoseconds: 2_200_000_000)
-                withAnimation { toast = nil }
+            let path = try await api.upload(data, filename: name)
+            attachPath = path
+            withAnimation { toast = "图片待发送——接着打字就一起发" }
+            attachTask?.cancel()
+            attachTask = Task {
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                if Task.isCancelled { return }
+                if !attachPath.isEmpty, draft.trimmingCharacters(in: .whitespaces).isEmpty {
+                    let only = attachPath
+                    attachPath = ""
+                    await deliver(PendingMsg(text: "", attach: only, failed: false))
+                }
             }
         } catch {
             withAnimation { toast = "没发出去：\(error.localizedDescription)" }

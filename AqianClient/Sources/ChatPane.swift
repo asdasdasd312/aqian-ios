@@ -653,12 +653,20 @@ struct ChatPane: View {
             attachPath = path
             withAnimation { toast = "图片待发送——接着打字就一起发" }
             attachTask?.cancel()
+            // 提示只留一会儿：之前这条一直挂在顶上不消失
+            Task {
+                try? await Task.sleep(nanoseconds: 3_500_000_000)
+                if !attachPath.isEmpty {
+                    withAnimation { toast = nil }
+                }
+            }
             attachTask = Task {
                 try? await Task.sleep(nanoseconds: 6_000_000_000)
                 if Task.isCancelled { return }
                 if !attachPath.isEmpty, draft.trimmingCharacters(in: .whitespaces).isEmpty {
                     let only = attachPath
                     attachPath = ""
+                    withAnimation { toast = nil }
                     await deliver(PendingMsg(text: "", attach: only, failed: false))
                 }
             }

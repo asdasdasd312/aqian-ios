@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 import UserNotifications
 import PhotosUI
 import UniformTypeIdentifiers
@@ -328,9 +329,31 @@ struct ChatPane: View {
         text.split(separator: "\n").compactMap { stickerURL(String($0)) }
     }
 
+    /// 「[手机] 语音 39.7s：D:\…（转写：…）」——这一条要变成**能按的语音条**，
+    /// 不是一行字。他按了才听得见自己刚才说了什么。
+    private func voiceLineURL(_ line: String) -> (URL, String)? {
+        let t = line.trimmingCharacters(in: .whitespaces)
+        guard t.hasPrefix("[手机] 语音") else { return nil }
+        guard let colon = t.firstIndex(of: "：") else { return nil }
+        let head = String(t[t.startIndex..<colon])
+        let secs = head.replacingOccurrences(of: "[手机] 语音", with: "")
+            .replacingOccurrences(of: "s", with: "")
+            .trimmingCharacters(in: .whitespaces)
+        var path = String(t[t.index(after: colon)...])
+        if let paren = path.firstIndex(of: "（") { path = String(path[path.startIndex..<paren]) }
+        path = path.trimmingCharacters(in: .whitespaces)
+        guard path.count > 3, let url = fileURL(path) else { return nil }
+        return (url, secs.isEmpty ? "语音" : secs + "″")
+    }
+
+    private func voiceLines(_ text: String) -> [(URL, String)] {
+        text.split(separator: "\n").compactMap { voiceLineURL(String($0)) }
+    }
+
     private func textWithoutStickers(_ text: String) -> String {
         text.split(separator: "\n")
-            .filter { stickerURL(String($0)) == nil && imagePathURL(String($0)) == nil }
+            .filter { stickerURL(String($0)) == nil && imagePathURL(String($0)) == nil
+                      && voiceLineURL(String($0)) == nil }
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -423,6 +446,9 @@ struct ChatPane: View {
                             ProgressView().frame(width: 120, height: 120)
                         }
                     }
+                }
+                ForEach(Array(voiceLines(m.text).enumerated()), id: \.offset) { _, item in
+                    VoiceBubble(url: item.0, label: item.1)
                 }
                 ForEach(stickerLines(m.text), id: \.absoluteString) { url in
                     AsyncImage(url: url) { phase in
@@ -741,5 +767,38 @@ struct ChatPane: View {
             Task { presence = try? await api.presence() }
         }
         Task { presence = try? await api.presence() }
+    }
+}
+
+/// 一条能按出声音的语音。KTV 里放在桌上录的那段，就是靠这个听的。
+struct VoiceBubble: View {
+    let url: URL
+    let label: String
+    @State private var player: AVPlayer?
+    @State private var playing = false
+
+    var body: some View {
+        Button {
+            if playing {
+                player?.pause(); playing = false
+            } else {
+                let p = AVPlayer(url: url)
+                p.play(); player = p; playing = true
+                NotificationCenter.default.addObserver(
+                    forName: .AVPlayerItemDidPlayToEndTime, object: p.currentItem, queue: .main
+                ) { _ in playing = false }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: playing ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 22))
+                Text(label).font(.system(size: 13, weight: .medium))
+                Image(systemName: "waveform").font(.system(size: 13)).opacity(0.6)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 9)
+            .background(Color(red: 0.16, green: 0.20, blue: 0.28))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }

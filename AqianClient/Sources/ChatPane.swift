@@ -18,6 +18,9 @@ struct ChatPane: View {
     @State private var showNote = false
     @State private var timer: Timer?
     @State private var presenceTimer: Timer?
+    @State private var linkDown = false
+    @State private var failCount = 0
+    @State private var justBack = false
 
     private var api: API { API.shared }
     private var seenKey: String { "seen." + session.id }
@@ -26,6 +29,16 @@ struct ChatPane: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if linkDown || justBack {
+                Text(linkDown ? "正在重连（第 \(failCount) 次）…" : "回来了")
+                    .font(.system(size: 11))
+                    .foregroundStyle(linkDown ? Color.orange.opacity(0.8) : Color.green.opacity(0.8))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.03))
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.2), value: linkDown)
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 26) {
@@ -231,8 +244,24 @@ struct ChatPane: View {
                 unread = fresh.filter { $0.t > seenAt }.count
             }
             msgs = fresh
+            error = nil
+            if linkDown {
+                linkDown = false
+                justBack = true
+                Task {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    justBack = false
+                }
+            }
+            failCount = 0
         } catch {
-            self.error = "读不到消息：\(error.localizedDescription)"
+            failCount += 1
+            if failCount >= 2 { linkDown = true }
+            if failCount == 1 {
+                self.error = "读不到消息：\(error.localizedDescription)"
+            } else {
+                self.error = nil
+            }
         }
     }
 

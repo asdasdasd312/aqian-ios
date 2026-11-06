@@ -82,11 +82,11 @@ final class API {
         try JSONDecoder().decode(SessionsResp.self, from: await get("/api/sessions")).sessions
     }
 
-    func messages(id: String, limit: Int = 60) async throws -> [Msg] {
+    func messages(id: String, limit: Int = 60) async throws -> MessagesResp {
         let data = try await get("/api/messages",
                                  query: [URLQueryItem(name: "id", value: id),
                                          URLQueryItem(name: "limit", value: String(limit))])
-        return try JSONDecoder().decode(MessagesResp.self, from: data).messages
+        return try JSONDecoder().decode(MessagesResp.self, from: data)
     }
 
     /// 带自动换线的取数据：主地址失败就试备用地址，试通了的记回 gw_url。

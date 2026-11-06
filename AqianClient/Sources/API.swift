@@ -31,7 +31,10 @@ struct Msg: Decodable, Identifiable {
 }
 
 struct SessionsResp: Decodable { let sessions: [SessionRow] }
-struct MessagesResp: Decodable { let messages: [Msg] }
+struct MessagesResp: Decodable {
+    let messages: [Msg]
+    let typing: Bool?
+}
 struct OkResp: Decodable { let ok: Bool }
 
 struct Presence: Decodable {

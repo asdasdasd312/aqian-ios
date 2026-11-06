@@ -65,7 +65,14 @@ struct ChatPane: View {
                             }
                             .frame(maxWidth: .infinity)
                         }
-                        ForEach(msgs) { m in
+                        ForEach(Array(msgs.enumerated()), id: \.element.id) { idx, m in
+                            if showDay(idx) {
+                                Text(dayLabel(m.t))
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.white.opacity(0.35))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.top, 6)
+                            }
                             VStack(alignment: .leading, spacing: 0) {
                                 row(m)
                                 if !m.isMe { askBox(m) }
@@ -243,6 +250,26 @@ struct ChatPane: View {
                 )
             if !m.isMe { Spacer(minLength: 40) }
         }
+    }
+
+
+    // MARK: - 按天分组
+
+    private func showDay(_ i: Int) -> Bool {
+        guard i < msgs.count else { return false }
+        if i == 0 { return true }
+        return dayLabel(msgs[i].t) != dayLabel(msgs[i - 1].t)
+    }
+
+    private func dayLabel(_ ms: Double) -> String {
+        let d = Date(timeIntervalSince1970: ms / 1000)
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        let cal = Calendar.current
+        if cal.isDateInToday(d) { return "今天" }
+        if cal.isDateInYesterday(d) { return "昨天" }
+        f.dateFormat = "M月d日"
+        return f.string(from: d)
     }
 
     /// 我在等他选的时候，手机上要能直接点——不是只看到一句「问你个事」

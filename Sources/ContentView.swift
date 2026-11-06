@@ -3,7 +3,7 @@ import SwiftUI
 struct ContentView: View {
     /// 默认地址：我现在那台电脑的临时隧道。换网络/重启隧道后要在这里改，
     /// 或者点右上角的齿轮改成新地址（存进 UserDefaults，下次打开还在）。
-    static let defaultURL = "https://talented-marked-army-reproductive.trycloudflare.com/?k=BYPqsxmRuvce"
+    static let defaultURL = "about:blank"
 
     @AppStorage("bridge_url") private var urlString: String = ContentView.defaultURL
     @State private var showSettings = false

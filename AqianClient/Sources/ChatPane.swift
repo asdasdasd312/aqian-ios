@@ -12,6 +12,7 @@ struct ChatPane: View {
     var onPick: (SessionRow) -> Void
 
     @State private var msgs: [Msg] = []
+    @State private var typing = false
     @State private var draft = ""
     @State private var sending = false
     @State private var error: String?
@@ -70,6 +71,19 @@ struct ChatPane: View {
                                 if !m.isMe { askBox(m) }
                             }
                             .id(m.t)
+                        }
+                        if typing {
+                            HStack(spacing: 6) {
+                                ForEach(0..<3) { i in
+                                    Circle()
+                                        .fill(Color.white.opacity(0.45))
+                                        .frame(width: 6, height: 6)
+                                        .opacity(0.35 + 0.25 * Double(i))
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 6)
+                            .padding(.leading, 2)
                         }
                     }
                     .padding(.horizontal, 24)
@@ -328,7 +342,9 @@ struct ChatPane: View {
 
     private func load(first: Bool = false) async {
         do {
-            let fresh = try await api.messages(id: session.id, limit: 80)
+            let resp = try await api.messages(id: session.id, limit: 80)
+            let fresh = resp.messages
+            typing = resp.typing ?? false
             if first {
                 unread = fresh.filter { $0.t > seenAt }.count
             }

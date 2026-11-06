@@ -191,10 +191,12 @@ final class API {
         return (try? JSONDecoder().decode(R.self, from: data2).text) ?? ""
     }
 
-    func send(_ text: String) async throws {
-        let payload = try JSONSerialization.data(withJSONObject: ["text": text])
-        guard let req = request("/api/send", method: "POST", body: payload) else { throw URLError(.badURL) }
-        let (data, _) = try await URLSession.shared.data(for: req)
-        _ = try? JSONDecoder().decode(OkResp.self, from: data)
+    func send(_ text: String, attach: String = "") async throws {
+        var payload: [String: Any] = ["text": text]
+        if !attach.isEmpty { payload["attach"] = attach }
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        guard let req = request("/api/send", method: "POST", body: data) else { throw URLError(.badURL) }
+        let (resp, _) = try await URLSession.shared.data(for: req)
+        _ = try? JSONDecoder().decode(OkResp.self, from: resp)
     }
 }

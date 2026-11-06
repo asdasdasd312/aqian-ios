@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 import PhotosUI
 import UniformTypeIdentifiers
 
@@ -397,6 +398,7 @@ struct ChatPane: View {
             typing = resp.typing ?? false
             if first {
                 unread = fresh.filter { $0.t > seenAt }.count
+                UNUserNotificationCenter.current().setBadgeCount(unread)
             }
             msgs = fresh
             error = nil

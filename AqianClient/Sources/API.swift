@@ -156,11 +156,15 @@ final class API {
                              forHTTPHeaderField: "X-Filename")
                 req.setValue(upid, forHTTPHeaderField: "X-Upload-Id")
                 req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-                let (resp, _) = try await URLSession.shared.upload(for: req, from: data)
+                let (respData, resp) = try await URLSession.shared.upload(for: req, from: data)
                 guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
                     throw URLError(.badServerResponse)
                 }
-                return "ok"
+                guard let obj = try? JSONSerialization.jsonObject(with: respData) as? [String: Any],
+                      let path = obj["path"] as? String, !path.isEmpty else {
+                    throw URLError(.cannotParseResponse)
+                }
+                return path
             } catch {
                 lastError = error
                 if attempt == 1 {

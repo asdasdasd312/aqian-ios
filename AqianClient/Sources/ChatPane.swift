@@ -141,10 +141,12 @@ struct ChatPane: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: msgs.count) { _ in
-                    if let last = msgs.last {
-                        withAnimation(.easeOut(duration: 0.25)) {
-                            proxy.scrollTo(last.t, anchor: .bottom)
-                        }
+                    guard let last = msgs.last else { return }
+                    // 一条「长文 + 下面挂图」比屏幕还高，滚到底会把上半截文字顶出去。
+                    // 所以长消息锚到「顶部」，短消息才滚到底。
+                    let big = last.text.count > 180 || last.text.contains("[图]")
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        proxy.scrollTo(last.t, anchor: big ? .top : .bottom)
                     }
                 }
             }

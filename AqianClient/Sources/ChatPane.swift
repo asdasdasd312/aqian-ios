@@ -784,42 +784,46 @@ struct ChatPane: View {
 }
 
 /// 一条能按出声音的语音。
-/// 2026-11-06 v0.33：加了进度条与播放动画；并修「点了没声音」——
-/// 不设 AVAudioSession 的 playback 类别时，静音键一拨就全程无声（图能看不代表声音能出来）。
+/// v0.35：不再用 AVPlayer 流式播——网关不返回 Range，AVPlayer 会一直「缓冲中」：
+/// 柱子动、进度不走、也没声。改成先下成临时文件，再用 AVAudioPlayer 播。
 struct VoiceBubble: View {
     let url: URL
     let label: String
 
-    @State private var player: AVPlayer?
+    @State private var audio: AVAudioPlayer?
     @State private var playing = false
     @State private var progress: Double = 0
     @State private var duration: Double = 0
-    @State private var elapsed: Double = 0
     @State private var failed = false
-    @State private var observer: Any?
+    @State private var loading = false
+    @State private var timer: Timer?
 
     var body: some View {
         HStack(spacing: 10) {
-            Button { toggle() } label: {
-                Image(systemName: playing ? "pause.circle.fill" : (failed ? "exclamationmark.circle.fill" : "play.circle.fill"))
-                    .font(.system(size: 26))
-                    .foregroundStyle(failed ? Color.orange : Color.white.opacity(0.92))
+            Button { tap() } label: {
+                Group {
+                    if loading { ProgressView().scaleEffect(0.7) }
+                    else {
+                        Image(systemName: playing ? "pause.circle.fill" : (failed ? "exclamationmark.circle.fill" : "play.circle.fill"))
+                            .font(.system(size: 26))
+                            .foregroundStyle(failed ? Color.orange : Color.white.opacity(0.92))
+                    }
+                }
+                .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 5) {
-                // 声纹：播放时上下动，停着就是一条静止的
                 HStack(spacing: 3) {
                     ForEach(0..<12, id: \.self) { i in
                         Capsule()
                             .fill(Color.white.opacity(playing ? 0.85 : 0.32))
-                            .frame(width: 2.5, height: barHeight(i))
+                            .frame(width: 2.5, height: playing ? CGFloat(4 + (i * 7 % 13)) : CGFloat(4 + (i % 3) * 2))
                     }
                 }
                 .frame(height: 18)
                 .animation(playing ? .easeInOut(duration: 0.42).repeatForever(autoreverses: true) : .default, value: playing)
 
-                // 进度
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color.white.opacity(0.16))
@@ -842,62 +846,51 @@ struct VoiceBubble: View {
     private var subtitle: String {
         if failed { return "放不出来" }
         if duration > 0 { return String(format: "%.0f″ / %.0f″", progress * duration, duration) }
-        if elapsed > 0 { return String(format: "%.0f″", elapsed) }
         return label
     }
 
-    private func barHeight(_ i: Int) -> CGFloat {
-        guard playing else { return CGFloat(4 + (i % 3) * 2) }
-        return CGFloat(4 + (i * 7 % 13))
+    private func tap() {
+        if playing { stop(); return }
+        if let a = audio { start(a); return }
+        loading = true
+        Task {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                let tmp = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString + ".audio")
+                try data.write(to: tmp)
+                let session = AVAudioSession.sharedInstance()
+                try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+                try? session.setActive(true)
+                let a = try AVAudioPlayer(contentsOf: tmp)
+                await MainActor.run {
+                    audio = a
+                    duration = a.duration
+                    loading = false
+                    start(a)
+                }
+            } catch {
+                await MainActor.run { failed = true; loading = false }
+            }
+        }
     }
 
-    private func toggle() {
-        if playing { stop(); return }
-        // 关键：先切到 playback，静音键拨了也出声
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-        try? session.setActive(true)
-
-        let p = player ?? AVPlayer(url: url)
-        player = p
-        if p.currentItem?.status == .failed { failed = true; return }
-        if duration <= 0 {
-            // v0.34：item.duration 刚建时是 0，得异步问资源要
-            Task {
-                let d = try? await AVURLAsset(url: url).load(.duration)
-                if let d = d, d.isNumeric {
-                    let sec = CMTimeGetSeconds(d)
-                    if sec.isFinite, sec > 0 { await MainActor.run { duration = sec } }
-                }
-            }
-        }
-        p.play()
+    private func start(_ a: AVAudioPlayer) {
+        a.play()
         playing = true
-        observer = p.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { t in
-            let sec = CMTimeGetSeconds(t)
-            if sec.isFinite, sec >= 0 {
-                elapsed = sec
-                if duration > 0 { progress = min(1, sec / duration) }
-                else if sec < 20 { progress = min(1, sec / 20) }   // 时长还没到时先按 20 秒假装走
-                if duration > 0, sec >= duration - 0.05 { stop() }
-            }
-        }
-        NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime,
-                                              object: p.currentItem, queue: .main) { _ in
-            progress = 1; stop()
-        }
-        NotificationCenter.default.addObserver(forName: .AVPlayerItemFailedToPlayToEndTime,
-                                              object: p.currentItem, queue: .main) { _ in
-            failed = true; stop()
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            guard let a = audio else { return }
+            if a.duration > 0 { progress = min(1, a.currentTime / a.duration) }
+            if !a.isPlaying { stop() }
         }
     }
 
     private func stop() {
-        player?.pause()
-        if let o = observer { player?.removeTimeObserver(o); observer = nil }
+        audio?.pause()
+        timer?.invalidate(); timer = nil
         playing = false
         progress = 0
-        elapsed = 0
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 }

@@ -783,35 +783,106 @@ struct ChatPane: View {
     }
 }
 
-/// 一条能按出声音的语音。KTV 里放在桌上录的那段，就是靠这个听的。
+/// 一条能按出声音的语音。
+/// 2026-11-06 v0.33：加了进度条与播放动画；并修「点了没声音」——
+/// 不设 AVAudioSession 的 playback 类别时，静音键一拨就全程无声（图能看不代表声音能出来）。
 struct VoiceBubble: View {
     let url: URL
     let label: String
+
     @State private var player: AVPlayer?
     @State private var playing = false
+    @State private var progress: Double = 0
+    @State private var duration: Double = 0
+    @State private var failed = false
+    @State private var observer: Any?
 
     var body: some View {
-        Button {
-            if playing {
-                player?.pause(); playing = false
-            } else {
-                let p = AVPlayer(url: url)
-                p.play(); player = p; playing = true
-                NotificationCenter.default.addObserver(
-                    forName: .AVPlayerItemDidPlayToEndTime, object: p.currentItem, queue: .main
-                ) { _ in playing = false }
+        HStack(spacing: 10) {
+            Button { toggle() } label: {
+                Image(systemName: playing ? "pause.circle.fill" : (failed ? "exclamationmark.circle.fill" : "play.circle.fill"))
+                    .font(.system(size: 26))
+                    .foregroundStyle(failed ? Color.orange : Color.white.opacity(0.92))
             }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: playing ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 22))
-                Text(label).font(.system(size: 13, weight: .medium))
-                Image(systemName: "waveform").font(.system(size: 13)).opacity(0.6)
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 5) {
+                // 声纹：播放时上下动，停着就是一条静止的
+                HStack(spacing: 3) {
+                    ForEach(0..<12, id: \.self) { i in
+                        Capsule()
+                            .fill(Color.white.opacity(playing ? 0.85 : 0.32))
+                            .frame(width: 2.5, height: barHeight(i))
+                    }
+                }
+                .frame(height: 18)
+                .animation(playing ? .easeInOut(duration: 0.42).repeatForever(autoreverses: true) : .default, value: playing)
+
+                // 进度
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.16))
+                        Capsule().fill(Color.white.opacity(0.75))
+                            .frame(width: max(2, geo.size.width * progress))
+                    }
+                }
+                .frame(height: 3)
+
+                Text(subtitle).font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.55))
             }
-            .padding(.horizontal, 14).padding(.vertical, 9)
-            .background(Color(red: 0.16, green: 0.20, blue: 0.28))
-            .clipShape(Capsule())
+            .frame(width: 118)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .background(Color(red: 0.16, green: 0.20, blue: 0.28))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .onDisappear { stop() }
+    }
+
+    private var subtitle: String {
+        if failed { return "放不出来" }
+        if duration > 0 { return String(format: "%.0f″ / %.0f″", progress * duration, duration) }
+        return label
+    }
+
+    private func barHeight(_ i: Int) -> CGFloat {
+        guard playing else { return CGFloat(4 + (i % 3) * 2) }
+        return CGFloat(4 + (i * 7 % 13))
+    }
+
+    private func toggle() {
+        if playing { stop(); return }
+        // 关键：先切到 playback，静音键拨了也出声
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+        try? session.setActive(true)
+
+        let p = player ?? AVPlayer(url: url)
+        player = p
+        if p.currentItem?.status == .failed { failed = true; return }
+        duration = CMTimeGetSeconds(p.currentItem?.duration ?? .zero).isFinite
+            ? max(0, CMTimeGetSeconds(p.currentItem!.duration)) : 0
+        p.play()
+        playing = true
+        observer = p.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { t in
+            let sec = CMTimeGetSeconds(t)
+            if duration > 0, sec.isFinite { progress = min(1, sec / duration) }
+            if duration > 0, sec >= duration - 0.05 { stop() }
+        }
+        NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime,
+                                              object: p.currentItem, queue: .main) { _ in
+            progress = 1; stop()
+        }
+        NotificationCenter.default.addObserver(forName: .AVPlayerItemFailedToPlayToEndTime,
+                                              object: p.currentItem, queue: .main) { _ in
+            failed = true; stop()
+        }
+    }
+
+    private func stop() {
+        player?.pause()
+        if let o = observer { player?.removeTimeObserver(o); observer = nil }
+        playing = false
+        progress = 0
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 }

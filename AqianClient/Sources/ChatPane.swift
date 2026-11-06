@@ -76,37 +76,36 @@ struct ChatPane: View {
     // MARK: - 顶栏
 
     private var header: some View {
-        HStack(spacing: 10) {
+        VStack(spacing: 8) {
             Image("Avatar")
                 .resizable()
                 .scaledToFill()
-                .frame(width: 26, height: 26)
+                .frame(width: 40, height: 40)
                 .clipShape(Circle())
-                .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 0.5))
+                .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 0.5))
 
             Button {
                 showNote = true
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 7) {
                     Circle()
                         .fill(dotColor)
-                        .frame(width: 6, height: 6)
-                        .opacity(presence?.state == "busy" ? 0.65 : 1)
-                    Text("阿潜").font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .frame(width: 7, height: 7)
+                        .opacity(presence?.state == "busy" ? 0.6 : 1)
+                    Text("阿潜")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.82))
                 }
             }
             .buttonStyle(.plain)
 
-            Spacer()
-            Text(timeLabel).font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.28))
-            Spacer()
-            Color.clear.frame(width: 26, height: 1)
+            Text(timeLabel)
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.26))
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 6)
-        .padding(.bottom, 10)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
         .contentShape(Rectangle())
         .onLongPressGesture(minimumDuration: 0.45) { onLongPressTitle() }
         .alert("阿潜", isPresented: $showNote) {

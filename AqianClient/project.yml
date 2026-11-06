@@ -6,8 +6,8 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "0.33"
-    CURRENT_PROJECT_VERSION: "33"
+    MARKETING_VERSION: "0.34"
+    CURRENT_PROJECT_VERSION: "34"
     SWIFT_VERSION: "5.0"
     CODE_SIGNING_ALLOWED: "NO"
     CODE_SIGNING_REQUIRED: "NO"

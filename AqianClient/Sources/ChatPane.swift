@@ -245,7 +245,8 @@ struct ChatPane: View {
                     }
                     ForEach(q.options, id: \.self) { opt in
                         Button {
-                            send(opt)
+                            draft = opt
+                            Task { await send() }
                         } label: {
                             Text(opt)
                                 .font(.system(size: 15, weight: .medium))

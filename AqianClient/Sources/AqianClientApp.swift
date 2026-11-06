@@ -26,7 +26,7 @@ struct RootView: View {
 }
 
 struct SetupView: View {
-    @ObservedObject private var bridge = PushBridge.shared
+    @ObservedObject private var bridge = PushState.shared
     @Binding var gwURL: String
     @Binding var gwKey: String
     @State private var url = ""
@@ -58,7 +58,7 @@ struct SetupView: View {
                     .autocorrectionDisabled()
             }
             Section("推送（实验）") {
-                Button("申请通知权限") { bridge.ask() }
+                Button("申请通知权限") { PushBridge.ask() }
                 Text(bridge.status)
                     .font(.footnote)
                     .foregroundStyle(.secondary)

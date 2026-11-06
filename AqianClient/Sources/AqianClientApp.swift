@@ -86,8 +86,8 @@ struct SetupView: View {
         .onAppear {
             // 装上就能用：预填当前的网关地址和口令（地址会变时在这里改）
             if gwURL.isEmpty {
-                url = "https://activation-governance-engineers-crossword.trycloudflare.com"
-                key = "BYPqsxmRuvce"
+                url = ""
+                key = ""
             } else {
                 url = gwURL
                 key = gwKey

@@ -1,0 +1,36 @@
+name: build-client
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "AqianClient/**"
+      - ".github/workflows/build-client.yml"
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        working-directory: AqianClient
+        run: xcodegen generate
+      - name: Build (unsigned)
+        working-directory: AqianClient
+        run: |
+          xcodebuild -project AqianClient.xcodeproj -scheme AqianClient \
+            -configuration Release -sdk iphoneos \
+            -archivePath "$RUNNER_TEMP/AqianClient.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            archive
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$RUNNER_TEMP/AqianClient.xcarchive/Products/Applications/AqianClient.app" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP" && zip -qry AqianClient-unsigned.ipa Payload
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: AqianClient-unsigned-ipa
+          path: ${{ runner.temp }}/AqianClient-unsigned.ipa

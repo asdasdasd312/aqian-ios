@@ -156,6 +156,8 @@ final class API {
                              forHTTPHeaderField: "X-Filename")
                 req.setValue(upid, forHTTPHeaderField: "X-Upload-Id")
                 req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+                // 图 + 字会合成一条走 /api/send，这里别再单独报一次
+                req.setValue("1", forHTTPHeaderField: "X-No-Queue")
                 let (respData, resp) = try await URLSession.shared.upload(for: req, from: data)
                 guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
                     throw URLError(.badServerResponse)

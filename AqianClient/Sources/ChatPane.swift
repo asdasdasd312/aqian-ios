@@ -372,6 +372,18 @@ struct ChatPane: View {
         return path
     }
 
+    private func receiptPaths(_ text: String) -> [String] {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        guard t.hasPrefix("[手机] 发来") else { return [] }
+        let exts = [".jpg", ".jpeg", ".png", ".heic", ".webp", ".gif"]
+        return t.split(separator: "\n").compactMap { line in
+            let v = line.trimmingCharacters(in: .whitespaces)
+            let low = v.lowercased()
+            guard exts.contains(where: { low.hasSuffix($0) }) else { return nil }
+            return v
+        }
+    }
+
     private func imagePathLines(_ text: String) -> [URL] {
         text.split(separator: "\n").compactMap { imagePathURL(String($0)) }
     }
@@ -441,22 +453,31 @@ struct ChatPane: View {
 
     @ViewBuilder
     private func row(_ m: Msg) -> some View {
-        if let tag = receiptTag(m.text), let path = receiptPath(m.text), let url = fileURL(path) {
+        if let tag = receiptTag(m.text), !receiptPaths(m.text).isEmpty {
+            let urls = receiptPaths(m.text).compactMap { fileURL($0) }
             VStack(alignment: .trailing, spacing: 4) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img.resizable().scaledToFit()
-                            .frame(maxWidth: 200, maxHeight: 260)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .onTapGesture { previewItem = PreviewItem(url) }
-                    case .failure:
-                        Text("[图] 没取到").font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.4))
-                    default:
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color.white.opacity(0.06))
-                            .frame(width: 160, height: 200)
+                HStack(spacing: 6) {
+                    ForEach(Array(urls.prefix(3)), id: \.absoluteString) { url in
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let img):
+                                img.resizable().scaledToFill()
+                                    .frame(maxWidth: 160, maxHeight: 210)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                                    .onTapGesture { previewItem = PreviewItem(url) }
+                            case .failure:
+                                Text("[图] 没取到").font(.system(size: 12))
+                                    .foregroundStyle(.white.opacity(0.4))
+                            default:
+                                RoundedRectangle(cornerRadius: 14)
+                                    .fill(Color.white.opacity(0.06))
+                                    .frame(width: 120, height: 160)
+                            }
+                        }
+                    }
+                    if urls.count > 3 {
+                        Text("+\(urls.count - 3)").font(.system(size: 13))
+                            .foregroundStyle(.white.opacity(0.5))
                     }
                 }
                 Text(tag)

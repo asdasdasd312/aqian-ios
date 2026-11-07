@@ -493,7 +493,7 @@ struct ChatPane: View {
                     .foregroundStyle(.white.opacity(0.45))
                 let tail = receiptTail(m.text)
                 if !tail.isEmpty {
-                    Text(display(tail))
+                    Text(linkify(display(tail)))
                         .font(.system(size: 16))
                         .lineSpacing(5)
                         .foregroundStyle(.white.opacity(0.9))
@@ -521,6 +521,40 @@ struct ChatPane: View {
         }
     }
 
+
+    /// 正文里的 http/https 变成可点的链接，点了跳系统浏览器。
+    /// 长链接中间省略成「域名/…/尾段」，但点下去仍是真的地址、长按能复制。
+    private func linkify(_ s: String) -> AttributedString {
+        var out = AttributedString()
+        guard let re = try? NSRegularExpression(pattern: "https?://[^\s\u{3000}，。；、）】]+") else {
+            return AttributedString(s)
+        }
+        let ns = s as NSString
+        var cursor = 0
+        for m in re.matches(in: s, range: NSRange(location: 0, length: ns.length)) {
+            if m.range.location > cursor {
+                out += AttributedString(ns.substring(with: NSRange(location: cursor, length: m.range.location - cursor)))
+            }
+            let raw = ns.substring(with: m.range)
+            var shown = raw
+            if raw.count > 46, let host = URL(string: raw)?.host {
+                shown = host + "/…/" + String(raw.suffix(10))
+            }
+            var piece = AttributedString(shown)
+            if let u = URL(string: raw) {
+                piece.link = u
+                piece.foregroundColor = Color(red: 0.55, green: 0.78, blue: 1.0)
+                piece.underlineStyle = .single
+            }
+            out += piece
+            cursor = m.range.location + m.range.length
+        }
+        if cursor < ns.length {
+            out += AttributedString(ns.substring(from: cursor))
+        }
+        return out
+    }
+
     /// 只给显示用：去掉 markdown 记号与我自己加的来源前缀
     private func display(_ s: String) -> String {
         var t = s
@@ -539,7 +573,7 @@ struct ChatPane: View {
             VStack(alignment: .leading, spacing: 8) {
                 let body = display(textWithoutStickers(m.text))
                 if !body.isEmpty {
-                    Text(body)
+                    Text(linkify(body))
                         .font(.system(size: 17))
                         .lineSpacing(6)
                         .foregroundStyle(m.isMe ? Color.white.opacity(0.88) : Color.white.opacity(0.92))

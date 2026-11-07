@@ -157,8 +157,8 @@ struct ChatPane: View {
                     LinearGradient(
                         stops: [
                             .init(color: .clear, location: 0.0),
-                            .init(color: .black.opacity(0.6), location: 0.035),
-                            .init(color: .black, location: 0.07)
+                            .init(color: .black.opacity(0.75), location: 0.012),
+                            .init(color: .black, location: 0.024)
                         ],
                         startPoint: .top, endPoint: .bottom
                     )
@@ -961,9 +961,9 @@ struct ChatPane: View {
     private func startPresence() {
         presenceTimer?.invalidate()
         presenceTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
-            Task { presence = try? await api.presence() }
+            Task { @MainActor in presence = try? await api.presence() }
         }
-        Task { presence = try? await api.presence() }
+        Task { @MainActor in presence = try? await api.presence() }
     }
 }
 

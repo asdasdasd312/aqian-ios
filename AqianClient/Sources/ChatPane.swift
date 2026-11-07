@@ -592,9 +592,11 @@ struct ChatPane: View {
             VStack(alignment: .leading, spacing: 8) {
                 let body = display(textWithoutStickers(m.text))
                 if !body.isEmpty {
-                    MsgText(text: body,
-                            color: m.isMe ? UIColor(white: 1, alpha: 0.88)
-                                          : UIColor(white: 1, alpha: 0.92))
+                    Text(linkify(body))
+                        .font(.system(size: 17))
+                        .lineSpacing(6)
+                        .foregroundStyle(m.isMe ? Color.white.opacity(0.88) : Color.white.opacity(0.92))
+                        .textSelection(.enabled)
                         .padding(.horizontal, m.isMe ? 16 : 0)
                         .padding(.vertical, m.isMe ? 11 : 0)
                         .background(

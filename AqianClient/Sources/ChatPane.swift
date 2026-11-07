@@ -155,10 +155,14 @@ struct ChatPane: View {
                     // 滚上去的那一行会被列表顶边硬切一半，看着像「字被压住」。
                     // 加一层同色渐隐，切边就变成淡出。
                     LinearGradient(
-                        colors: [Color(red: 0.031, green: 0.039, blue: 0.055), Color(red: 0.031, green: 0.039, blue: 0.055).opacity(0)],
+                        stops: [
+                            .init(color: Color(red: 0.031, green: 0.039, blue: 0.055), location: 0.0),
+                            .init(color: Color(red: 0.031, green: 0.039, blue: 0.055).opacity(0.92), location: 0.45),
+                            .init(color: Color(red: 0.031, green: 0.039, blue: 0.055).opacity(0), location: 1.0)
+                        ],
                         startPoint: .top, endPoint: .bottom
                     )
-                    .frame(height: 26)
+                    .frame(height: 44)
                     .allowsHitTesting(false)
                 }
                 .fullScreenCover(item: $previewItem) { item in

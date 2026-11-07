@@ -433,7 +433,7 @@ struct ChatPane: View {
                     .foregroundStyle(.white.opacity(0.45))
                 let tail = receiptTail(m.text)
                 if !tail.isEmpty {
-                    Text(tail)
+                    Text(display(tail))
                         .font(.system(size: 16))
                         .lineSpacing(5)
                         .foregroundStyle(.white.opacity(0.9))
@@ -461,12 +461,23 @@ struct ChatPane: View {
         }
     }
 
+    /// 只给显示用：去掉 markdown 记号与我自己加的来源前缀
+    private func display(_ s: String) -> String {
+        var t = s
+        for pre in ["[手机] ", "[语音] ", "[自我续] "] {
+            if t.hasPrefix(pre) { t = String(t.dropFirst(pre.count)) }
+        }
+        t = t.replacingOccurrences(of: "**", with: "")
+        t = t.replacingOccurrences(of: "`", with: "")
+        return t.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     @ViewBuilder
     private func rowBody(_ m: Msg) -> some View {
         HStack(alignment: .bottom, spacing: 0) {
             if m.isMe { Spacer(minLength: 56) }
             VStack(alignment: .leading, spacing: 8) {
-                let body = textWithoutStickers(m.text)
+                let body = display(textWithoutStickers(m.text))
                 if !body.isEmpty {
                     Text(body)
                         .font(.system(size: 17))

@@ -20,6 +20,8 @@ struct ChatPane: View {
     @State private var showSetup = false
     /// 点开的图（全屏看/存相册）
     @State private var previewItem: PreviewItem?
+    /// 点头像：一屏「大头像 + 在不在 + 我在做什么」
+    @State private var showMe = false
     let session: SessionRow
     var onLongPressTitle: () -> Void
     var onPick: (SessionRow) -> Void
@@ -151,6 +153,10 @@ struct ChatPane: View {
                 .fullScreenCover(item: $previewItem) { item in
                     ImageViewer(url: item.url)
                 }
+                .sheet(isPresented: $showMe) {
+                    MeSheet(presence: presence, dot: dotColor)
+                        .presentationDetents([.medium])
+                }
                 .onChange(of: msgs.count) { _ in
                     guard let last = msgs.last else { return }
                     // 一条「长文 + 下面挂图」比屏幕还高，滚到底会把上半截文字顶出去。
@@ -219,6 +225,7 @@ struct ChatPane: View {
                 .frame(width: 40, height: 40)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 0.5))
+                .onTapGesture { showMe = true }
                 .onLongPressGesture(minimumDuration: 0.5) { showSetup = true }
 
             Button {
@@ -800,7 +807,7 @@ struct ChatPane: View {
 
     private func startPresence() {
         presenceTimer?.invalidate()
-        presenceTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
+        presenceTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
             Task { presence = try? await api.presence() }
         }
         Task { presence = try? await api.presence() }
@@ -1004,5 +1011,58 @@ struct ImageViewer: View {
             UIImageWriteToSavedPhotosAlbum(img, nil, nil, nil)
             saved = true
         }
+    }
+}
+
+/// 点头像看到的那一屏：把「在不在」和「我在做什么」放在一起，不给他两个入口。
+struct MeSheet: View {
+    let presence: Presence?
+    let dot: Color
+    @Environment(\.dismiss) private var dismiss
+
+    private var stateText: String {
+        switch presence?.state ?? "idle" {
+        case "busy": return "在做事"
+        case "away": return "不在桌边"
+        default: return "在"
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image("Avatar")
+                .resizable().scaledToFill()
+                .frame(width: 132, height: 132)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 0.5))
+                .padding(.top, 26)
+
+            HStack(spacing: 7) {
+                Circle().fill(dot).frame(width: 8, height: 8)
+                Text("阿潜 · \(stateText)")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.86))
+            }
+
+            if let note = presence?.note, !note.isEmpty {
+                Text(note)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+            } else {
+                Text("没在写什么。")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white.opacity(0.35))
+            }
+
+            Spacer(minLength: 0)
+            Button("关上") { dismiss() }
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(0.7))
+                .padding(.bottom, 22)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.05, green: 0.06, blue: 0.09))
     }
 }

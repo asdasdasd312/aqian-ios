@@ -448,7 +448,17 @@ struct ChatPane: View {
     private func receiptTail(_ text: String) -> String {
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
         guard lines.count > 1 else { return "" }
-        return lines.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        // 回执下面是「路径 + 真正说的话」：路径已经在缩略图里了，正文只留人话，
+        // 否则一长串 D:\阿潜\收件箱\… 会把他说的话挤到看不见。
+        let exts = [".jpg", ".jpeg", ".png", ".heic", ".webp", ".gif"]
+        let kept = lines.dropFirst().filter { line in
+            let v = line.trimmingCharacters(in: .whitespaces)
+            let low = v.lowercased()
+            let looksPath = v.count > 3 && v.contains(":\\") || low.hasPrefix("d:\\")
+            let isImage = exts.contains(where: { low.hasSuffix($0) })
+            return !(looksPath || isImage)
+        }
+        return kept.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     @ViewBuilder

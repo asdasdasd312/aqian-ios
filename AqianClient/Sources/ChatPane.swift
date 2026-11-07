@@ -1052,8 +1052,8 @@ struct MeSheet: View {
 
     private var stateText: String {
         switch presence?.state ?? "idle" {
-        case "busy": return "在做事"
-        case "away": return "不在桌边"
+        case "busy": return "在做东西"
+        case "away": return "离开了一会儿"
         default: return "在"
         }
     }
@@ -1081,7 +1081,7 @@ struct MeSheet: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 28)
             } else {
-                Text("没在写什么。")
+                Text("手头空着，就在这儿。")
                     .font(.system(size: 14))
                     .foregroundStyle(.white.opacity(0.35))
             }

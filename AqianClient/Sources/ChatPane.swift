@@ -44,11 +44,11 @@ struct ChatPane: View {
     @State private var justBack = false
     @State private var pickPhoto = false
     @State private var pickFile = false
-    @State private var photoItem: PhotosPickerItem?
+    @State private var photoItems: [PhotosPickerItem] = []
     @State private var uploading = false
     @State private var pending: [PendingMsg] = []
-    @State private var attachPath = ""
-    @State private var attachTask: Task<Void, Never>?
+    @State private var attachPaths: [String] = []
+    @State private var attachIDs: [String] = []
     @State private var toast: String?
     @State private var toastTask: Task<Void, Never>?
     @AppStorage("send_original") private var sendOriginal = true
@@ -197,7 +197,8 @@ struct ChatPane: View {
         .sheet(isPresented: $showSetup) {
             SetupView(gwURL: $gwURL, gwKey: $gwKey)
         }
-        .photosPicker(isPresented: $pickPhoto, selection: $photoItem, matching: .images,
+        .photosPicker(isPresented: $pickPhoto, selection: $photoItems, maxSelectionCount: 9,
+                      matching: .images,
                       preferredItemEncoding: sendOriginal ? .current : .automatic)
         .fileImporter(isPresented: $pickFile, allowedContentTypes: [.data, .image, .pdf, .plainText],
                       allowsMultipleSelection: false) { result in
@@ -205,13 +206,18 @@ struct ChatPane: View {
                 Task { await uploadFile(url) }
             }
         }
-        .onChange(of: photoItem) { item in
-            guard let item else { return }
+        .onChange(of: photoItems) { items in
+            guard !items.isEmpty else { return }
             Task {
-                if let data = try? await item.loadTransferable(type: Data.self) {
-                    await uploadData(data, name: "照片-\(Int(Date().timeIntervalSince1970)).jpg")
+                for item in items {
+                    let dup = item.itemIdentifier.map { attachIDs.contains($0) } ?? false
+                    if dup { showToast("这张已经选过", seconds: 2.0); continue }
+                    if let data = try? await item.loadTransferable(type: Data.self) {
+                        await uploadData(data, name: "照片-\(Int(Date().timeIntervalSince1970)).jpg",
+                                         id: item.itemIdentifier ?? "")
+                    }
                 }
-                photoItem = nil
+                photoItems = []
             }
         }
         .overlay(alignment: .top) {
@@ -315,6 +321,16 @@ struct ChatPane: View {
 
     /// 我要给他看一张图时，正文里会写一行 `[图] D:\阿潜\画-xxx.jpg`。
     /// 手机上那个路径没有意义，换成网关的 /api/file 去取。
+    /// 网关上的绝对路径 → 可加载的 URL（缩略图条用，不带「[图]」前缀）。
+    private func rawFileURL(_ path: String) -> URL? {
+        let base = (UserDefaults.standard.string(forKey: "gw_url") ?? "").trimmingCharacters(in: .whitespaces)
+        let key = UserDefaults.standard.string(forKey: "gw_key") ?? ""
+        guard !base.isEmpty, path.count > 3, var comps = URLComponents(string: base + "/api/file") else { return nil }
+        comps.queryItems = [URLQueryItem(name: "path", value: path),
+                            URLQueryItem(name: "k", value: key)]
+        return comps.url
+    }
+
     private func imagePathURL(_ line: String) -> URL? {
         let t = line.trimmingCharacters(in: .whitespaces)
         guard t.hasPrefix("[图]") else { return nil }
@@ -598,7 +614,9 @@ struct ChatPane: View {
     // MARK: - 输入
 
     private var composer: some View {
-        HStack(spacing: 10) {
+        VStack(spacing: 0) {
+            if !attachPaths.isEmpty { attachStrip }
+            HStack(spacing: 10) {
             Menu {
                 Button { pickPhoto = true } label: { Label(sendOriginal ? "照片（原图）" : "照片", systemImage: "photo") }
                 Button { pickFile = true } label: { Label("文件", systemImage: "doc") }
@@ -689,6 +707,7 @@ struct ChatPane: View {
         )
         .padding(.horizontal, 18)
         .padding(.bottom, 10)
+        }
     }
 
     // MARK: - 数据
@@ -741,11 +760,12 @@ struct ChatPane: View {
 
     private func send() async {
         let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !body.isEmpty else { return }
+        guard !body.isEmpty || !attachPaths.isEmpty else { return }
         draft = ""
-        attachTask?.cancel()
-        let attach = attachPath
-        attachPath = ""
+        let attach = attachPaths.joined(separator: "
+")
+        attachPaths = []
+        attachIDs = []
         let item = PendingMsg(text: body, attach: attach, failed: false)
         withAnimation { pending.append(item) }
         await deliver(item)
@@ -816,27 +836,53 @@ struct ChatPane: View {
         }
     }
 
-    private func uploadData(_ data: Data, name: String) async {
+    private func uploadData(_ data: Data, name: String, id: String = "") async {
         uploading = true
         do {
             let path = try await api.upload(shrink(data), filename: name)
-            attachPath = path
-            showToast("图片已带上 · 接着打字就一起发", seconds: 3.0)
-            attachTask?.cancel()
-            attachTask = Task {
-                try? await Task.sleep(nanoseconds: 6_000_000_000)
-                if Task.isCancelled { return }
-                if !attachPath.isEmpty, draft.trimmingCharacters(in: .whitespaces).isEmpty {
-                    let only = attachPath
-                    attachPath = ""
-                    showToast(nil)
-                    await deliver(PendingMsg(text: "", attach: only, failed: false))
-                }
-            }
+            attachPaths.append(path)
+            if !id.isEmpty { attachIDs.append(id) }
+            showToast("带上了 \(attachPaths.count) 张 · 接着打字就一起发", seconds: 3.0)
         } catch {
             showToast("没发出去：" + error.localizedDescription, seconds: 4.0)
         }
         uploading = false
+    }
+
+    /// 输入框上方那排缩略图：能看选了哪几张、能删、能点开看大图、重复的标一下。
+    private var attachStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(attachPaths.enumerated()), id: \.offset) { i, path in
+                    ZStack(alignment: .topTrailing) {
+                        AsyncImage(url: rawFileURL(path)) { phase in
+                            if let img = phase.image {
+                                img.resizable().scaledToFill()
+                            } else {
+                                Color.white.opacity(0.06)
+                            }
+                        }
+                        .frame(width: 56, height: 56)
+                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .onTapGesture {
+                            if let u = rawFileURL(path) { previewItem = PreviewItem(url: u) }
+                        }
+
+                        Button {
+                            attachPaths.remove(at: i)
+                            if i < attachIDs.count { attachIDs.remove(at: i) }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 15))
+                                .foregroundStyle(Color.black.opacity(0.75), Color.white.opacity(0.9))
+                        }
+                        .offset(x: 4, y: -4)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+        .frame(height: 64)
     }
 
     private func startPolling() {

@@ -163,9 +163,6 @@ struct ChatPane: View {
                         startPoint: .top, endPoint: .bottom
                     )
                 }
-                    .frame(height: 44)
-                    .allowsHitTesting(false)
-                }
                 .fullScreenCover(item: $previewItem) { item in
                     ImageViewer(url: item.url)
                 }

@@ -37,6 +37,7 @@ struct ChatPane: View {
     @State private var voiceMode = false
     @State private var unread = 0
     @State private var showNote = false
+    @State private var lastUserDrag = Date.distantPast
     @State private var timer: Timer?
     @State private var presenceTimer: Timer?
     @State private var linkDown = false
@@ -159,6 +160,8 @@ struct ChatPane: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 14)
                     .padding(.bottom, 12)
+                    .simultaneousGesture(DragGesture(minimumDistance: 6)
+                        .onChanged { _ in lastUserDrag = Date() })
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .mask(alignment: .top) {
@@ -182,11 +185,15 @@ struct ChatPane: View {
                 }
                 .onChange(of: msgs.count) { _ in
                     guard let last = msgs.last else { return }
+                    // 他正在往上翻就别拽他回来：只有我发的、或者他 12 秒没动过，才自动滚。
+                    let idle = Date().timeIntervalSince(lastUserDrag) > 12
+                    guard last.isMe || idle else { return }
                     // 一条「长文 + 下面挂图」比屏幕还高，滚到底会把上半截文字顶出去。
                     // 所以长消息锚到「顶部」，短消息才滚到底。
                     let big = last.text.count > 180 || last.text.contains("[图]")
                     withAnimation(.easeOut(duration: 0.25)) {
                         proxy.scrollTo(last.t, anchor: big ? .top : .bottom)
+                    }
                     }
                 }
             }

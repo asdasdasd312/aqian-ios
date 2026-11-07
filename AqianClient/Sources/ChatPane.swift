@@ -10,6 +10,8 @@ struct PendingMsg: Identifiable, Equatable {
     let text: String
     var attach: String = ""
     var failed: Bool
+    /// 服务端已经收下了，但会话里还没长出那条消息——这期间仍然要显示。
+    var sent: Bool = false
 }
 
 struct ChatPane: View {
@@ -113,6 +115,10 @@ struct ChatPane: View {
                                     Button("重发") { Task { await resend(item) } }
                                         .font(.system(size: 13, weight: .medium))
                                         .foregroundStyle(Color(red: 0.95, green: 0.55, blue: 0.45))
+                                } else if item.sent {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.white.opacity(0.35))
                                 } else {
                                     ProgressView().scaleEffect(0.6)
                                 }
@@ -643,6 +649,15 @@ struct ChatPane: View {
                 try? await UNUserNotificationCenter.current().setBadgeCount(unread)
             }
             msgs = fresh
+            // 真消息长出来之后，才把本地那条乐观气泡收走
+            if !pending.isEmpty {
+                let mine = fresh.filter { $0.isMe }
+                withAnimation {
+                    pending.removeAll { p in
+                        p.sent && mine.contains { m in m.text.contains(p.text) }
+                    }
+                }
+            }
             error = nil
             if linkDown {
                 linkDown = false
@@ -686,7 +701,8 @@ struct ChatPane: View {
         sending = true
         do {
             try await api.send(item.text, attach: item.attach)
-            withAnimation { pending.removeAll { $0.id == item.id } }
+            // 先标记「已送达」但继续显示：服务端那条要等网关重读会话才出现，中间有几秒空白。
+            if let i = pending.firstIndex(where: { $0.id == item.id }) { pending[i].sent = true }
             await load()
             markSeen()
             self.error = nil

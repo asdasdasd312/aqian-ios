@@ -138,7 +138,60 @@ final class API {
         _ = try? JSONDecoder().decode(OkResp.self, from: data)
     }
 
+    /// 大文件分片上传：经隧道单次 >200KB 会被掐断，切成 100KB 一块。
+    private func uploadChunked(_ data: Data, filename: String) async throws -> String {
+        let upid = UUID().uuidString
+        let chunkSize = 100_000
+        let chunks = stride(from: 0, to: data.count, by: chunkSize).map {
+            data[$0 ..< min($0 + chunkSize, data.count)]
+        }
+        var path = ""
+        for (idx, part) in chunks.enumerated() {
+            var lastError: Error = URLError(.unknown)
+            var ok = false
+            for _ in 1...3 {
+                do {
+                    guard var c = URLComponents(string: base.trimmingCharacters(in: .whitespaces)) else {
+                        throw URLError(.badURL)
+                    }
+                    c.path = "/api/upload"
+                    guard let url = c.url else { throw URLError(.badURL) }
+                    var req = URLRequest(url: url)
+                    req.httpMethod = "POST"
+                    req.timeoutInterval = 60
+                    req.setValue(key, forHTTPHeaderField: "X-Aqian-Key")
+                    req.setValue(filename.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "file",
+                                 forHTTPHeaderField: "X-Filename")
+                    req.setValue(upid, forHTTPHeaderField: "X-Upload-Id")
+                    req.setValue(String(idx), forHTTPHeaderField: "X-Chunk")
+                    req.setValue(String(chunks.count), forHTTPHeaderField: "X-Chunks")
+                    req.setValue(String(data.count), forHTTPHeaderField: "X-Total-Bytes")
+                    req.setValue("1", forHTTPHeaderField: "X-No-Queue")
+                    req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+                    let (respData, resp) = try await URLSession.shared.upload(for: req, from: part)
+                    guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+                        throw URLError(.badServerResponse)
+                    }
+                    if let obj = try? JSONSerialization.jsonObject(with: respData) as? [String: Any],
+                       let p = obj["path"] as? String, !p.isEmpty {
+                        path = p
+                    }
+                    ok = true
+                    break
+                } catch {
+                    lastError = error
+                }
+            }
+            if !ok { throw lastError }
+        }
+        guard !path.isEmpty else { throw URLError(.cannotParseResponse) }
+        return path
+    }
+
     func upload(_ data: Data, filename: String) async throws -> String {
+        if data.count > 120_000 {
+            return try await uploadChunked(data, filename: filename)
+        }
         let upid = UUID().uuidString
         var lastError: Error = URLError(.unknown)
         for attempt in 1...2 {
@@ -156,11 +209,17 @@ final class API {
                              forHTTPHeaderField: "X-Filename")
                 req.setValue(upid, forHTTPHeaderField: "X-Upload-Id")
                 req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-                let (resp, _) = try await URLSession.shared.upload(for: req, from: data)
+                // 图 + 字会合成一条走 /api/send，这里别再单独报一次
+                req.setValue("1", forHTTPHeaderField: "X-No-Queue")
+                let (respData, resp) = try await URLSession.shared.upload(for: req, from: data)
                 guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
                     throw URLError(.badServerResponse)
                 }
-                return "ok"
+                guard let obj = try? JSONSerialization.jsonObject(with: respData) as? [String: Any],
+                      let path = obj["path"] as? String, !path.isEmpty else {
+                    throw URLError(.cannotParseResponse)
+                }
+                return path
             } catch {
                 lastError = error
                 if attempt == 1 {

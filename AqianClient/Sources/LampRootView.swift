@@ -76,31 +76,19 @@ struct LampRootView: View {
 /// 底色：近黑的屋子，底部一团很淡的暖光。不抢字。
 struct LampBackground: View {
     var body: some View {
-        ZStack {
-            Color(red: 0.024, green: 0.031, blue: 0.050)
-
-            // 大范围的一层暖，像屋子里开着灯
-            RadialGradient(
-                colors: [Color(red: 1.0, green: 0.76, blue: 0.48).opacity(0.20), .clear],
-                center: UnitPoint(x: 0.5, y: 1.02),
-                startRadius: 0,
-                endRadius: 980
-            )
-
-            // 近处的一小团更实一点，让「有灯」这件事看得出来
-            RadialGradient(
-                colors: [Color(red: 1.0, green: 0.84, blue: 0.62).opacity(0.20), .clear],
-                center: UnitPoint(x: 0.42, y: 1.06),
-                startRadius: 0,
-                endRadius: 430
-            )
-
-            // 顶部压一点冷色，别让它整片发黄
-            LinearGradient(
-                colors: [Color(red: 0.05, green: 0.07, blue: 0.11).opacity(0.9), .clear],
-                startPoint: .top, endPoint: UnitPoint(x: 0.5, y: 0.35)
-            )
+        GeometryReader { geo in
+            Image("AppBackground")
+                .resizable()
+                .scaledToFill()
+                .frame(width: geo.size.width, height: geo.size.height)
+                .clipped()
+                .overlay(
+                    LinearGradient(
+                        colors: [Color.black.opacity(0.18), .clear, Color.black.opacity(0.28)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .ignoresSafeArea()
         }
-        .ignoresSafeArea()
     }
 }

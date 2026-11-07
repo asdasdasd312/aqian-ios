@@ -403,11 +403,9 @@ struct ChatPane: View {
 
     /// 回执那行后面的正文（「图 + 一句话」时，字不能被标签吃掉）
     private func receiptTail(_ text: String) -> String {
-        let lines = text.split(separator: "
-", omittingEmptySubsequences: false)
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
         guard lines.count > 1 else { return "" }
-        return lines.dropFirst().joined(separator: "
-").trimmingCharacters(in: .whitespacesAndNewlines)
+        return lines.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     @ViewBuilder

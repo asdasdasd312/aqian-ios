@@ -26,7 +26,9 @@ struct Msg: Decodable, Identifiable {
     let role: String
     let text: String
     let ask: AskBox?
-    var id: Double { t }
+    // 同一秒里可能有好几条（连发、图+字），只用时间戳当 id 会撞，
+    // 撞了 SwiftUI 就会把两条画在同一个位置（字重叠）并让滚动位置乱跳。
+    var id: String { "\(t)#\(role)#\(text.count)#\(text.prefix(24))" }
     var isMe: Bool { role == "user" }
 }
 

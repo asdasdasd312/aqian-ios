@@ -1256,7 +1256,8 @@ struct MeSheet: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 28)
             } else {
-                Text("手头空着，就在这儿。")
+                // 没写「在做什么」时，按状态给一句话，别一边说在做东西一边说手头空着。
+                Text(presence?.state == "busy" ? "在做事，还没写下来。" : "手头空着，就在这儿。")
                     .font(.system(size: 14))
                     .foregroundStyle(.white.opacity(0.35))
             }

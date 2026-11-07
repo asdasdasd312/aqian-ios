@@ -220,7 +220,7 @@ struct ChatPane: View {
             CallView(base: voiceBase, key: gwKey)
         }
         .photosPicker(isPresented: $pickPhoto, selection: $photoItems, maxSelectionCount: 9,
-                      matching: [.images, .videos],
+                      matching: .any(of: [.images, .videos]),
                       preferredItemEncoding: sendOriginal ? .current : .automatic)
         .fileImporter(isPresented: $pickFile, allowedContentTypes: [.data, .image, .pdf, .plainText],
                       allowsMultipleSelection: false) { result in
@@ -407,8 +407,7 @@ struct ChatPane: View {
 
     /// 「[视频] http://…」——一条消息里可以挂视频，点缩略图才播。
     private func videoPathLines(_ text: String) -> [URL] {
-        text.split(separator: "
-").compactMap { raw in
+        text.split(separator: "\n").compactMap { raw in
             let t = raw.trimmingCharacters(in: .whitespaces)
             guard t.hasPrefix("[视频] "),
                   let u = URL(string: String(t.dropFirst(5)).trimmingCharacters(in: .whitespaces))

@@ -52,6 +52,16 @@ struct ChatPane: View {
     @State private var toast: String?
     @State private var toastTask: Task<Void, Never>?
     @AppStorage("send_original") private var sendOriginal = true
+    @State private var showCall = false
+    @AppStorage("voice_url") private var voiceURL = ""
+
+    /// 语音桥地址：设置里填了就用；没填就按网关主机推一个（局域网直连时可用）
+    private var voiceBase: URL {
+        if !voiceURL.isEmpty, let u = URL(string: voiceURL) { return u }
+        var host = "127.0.0.1"
+        if let u = URL(string: gwURL), let h = u.host { host = h }
+        return URL(string: "ws://\(host):57942/ws") ?? URL(string: "ws://127.0.0.1:57942/ws")!
+    }
 
     private var api: API { API.shared }
     private var seenKey: String { "seen." + session.id }
@@ -198,6 +208,9 @@ struct ChatPane: View {
         }
         .sheet(isPresented: $showSetup) {
             SetupView(gwURL: $gwURL, gwKey: $gwKey)
+        }
+        .fullScreenCover(isPresented: $showCall) {
+            CallView(base: voiceBase, key: gwKey)
         }
         .photosPicker(isPresented: $pickPhoto, selection: $photoItems, maxSelectionCount: 9,
                       matching: .images,
@@ -573,11 +586,9 @@ struct ChatPane: View {
             VStack(alignment: .leading, spacing: 8) {
                 let body = display(textWithoutStickers(m.text))
                 if !body.isEmpty {
-                    Text(linkify(body))
-                        .font(.system(size: 17))
-                        .lineSpacing(6)
-                        .foregroundStyle(m.isMe ? Color.white.opacity(0.88) : Color.white.opacity(0.92))
-                        .textSelection(.enabled)
+                    MsgText(text: body,
+                            color: m.isMe ? UIColor(white: 1, alpha: 0.88)
+                                          : UIColor(white: 1, alpha: 0.92))
                         .padding(.horizontal, m.isMe ? 16 : 0)
                         .padding(.vertical, m.isMe ? 11 : 0)
                         .background(
@@ -684,6 +695,16 @@ struct ChatPane: View {
         VStack(spacing: 0) {
             if !attachPaths.isEmpty { attachStrip }
             HStack(spacing: 10) {
+            Button {
+                showCall = true
+            } label: {
+                Image(systemName: "phone.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .frame(width: 34, height: 34)
+            }
+            .padding(.leading, 12)
+
             Menu {
                 Button { pickPhoto = true } label: { Label(sendOriginal ? "照片（原图）" : "照片", systemImage: "photo") }
                 Button { pickFile = true } label: { Label("文件", systemImage: "doc") }

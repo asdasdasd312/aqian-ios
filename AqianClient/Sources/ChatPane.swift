@@ -762,8 +762,7 @@ struct ChatPane: View {
         let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty || !attachPaths.isEmpty else { return }
         draft = ""
-        let attach = attachPaths.joined(separator: "
-")
+        let attach = attachPaths.joined(separator: "\n")
         attachPaths = []
         attachIDs = []
         let item = PendingMsg(text: body, attach: attach, failed: false)
@@ -865,7 +864,7 @@ struct ChatPane: View {
                         .frame(width: 56, height: 56)
                         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                         .onTapGesture {
-                            if let u = rawFileURL(path) { previewItem = PreviewItem(url: u) }
+                            if let u = rawFileURL(path) { previewItem = PreviewItem(u) }
                         }
 
                         Button {

@@ -194,7 +194,6 @@ struct ChatPane: View {
                     withAnimation(.easeOut(duration: 0.25)) {
                         proxy.scrollTo(last.t, anchor: big ? .top : .bottom)
                     }
-                    }
                 }
             }
             if let error {

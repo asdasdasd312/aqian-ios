@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import AVKit
 import UserNotifications
 import PhotosUI
 import UniformTypeIdentifiers
@@ -219,7 +220,7 @@ struct ChatPane: View {
             CallView(base: voiceBase, key: gwKey)
         }
         .photosPicker(isPresented: $pickPhoto, selection: $photoItems, maxSelectionCount: 9,
-                      matching: .images,
+                      matching: [.images, .videos],
                       preferredItemEncoding: sendOriginal ? .current : .automatic)
         .fileImporter(isPresented: $pickFile, allowedContentTypes: [.data, .image, .pdf, .plainText],
                       allowsMultipleSelection: false) { result in
@@ -233,9 +234,12 @@ struct ChatPane: View {
                 for item in items {
                     let dup = item.itemIdentifier.map { attachIDs.contains($0) } ?? false
                     if dup { showToast("这张已经选过", seconds: 2.0); continue }
+                    let isVideo = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
                     if let data = try? await item.loadTransferable(type: Data.self) {
-                        await uploadData(data, name: "照片-\(Int(Date().timeIntervalSince1970)).jpg",
-                                         id: item.itemIdentifier ?? "")
+                        let name = isVideo
+                            ? "视频-\(Int(Date().timeIntervalSince1970)).mp4"
+                            : "照片-\(Int(Date().timeIntervalSince1970)).jpg"
+                        await uploadData(data, name: name, id: item.itemIdentifier ?? "")
                     }
                 }
                 photoItems = []
@@ -398,6 +402,18 @@ struct ChatPane: View {
             let low = v.lowercased()
             guard exts.contains(where: { low.hasSuffix($0) }) else { return nil }
             return v
+        }
+    }
+
+    /// 「[视频] http://…」——一条消息里可以挂视频，点缩略图才播。
+    private func videoPathLines(_ text: String) -> [URL] {
+        text.split(separator: "
+").compactMap { raw in
+            let t = raw.trimmingCharacters(in: .whitespaces)
+            guard t.hasPrefix("[视频] "),
+                  let u = URL(string: String(t.dropFirst(5)).trimmingCharacters(in: .whitespaces))
+            else { return nil }
+            return u
         }
     }
 
@@ -596,7 +612,12 @@ struct ChatPane: View {
                         .font(.system(size: 17))
                         .lineSpacing(6)
                         .foregroundStyle(m.isMe ? Color.white.opacity(0.88) : Color.white.opacity(0.92))
-                        .textSelection(.enabled)
+                        .contextMenu {
+                            Button {
+                                UIPasteboard.general.string = body
+                                showToast("整段已复制", seconds: 1.6)
+                            } label: { Label("复制全文", systemImage: "doc.on.doc") }
+                        }
                         .padding(.horizontal, m.isMe ? 16 : 0)
                         .padding(.vertical, m.isMe ? 11 : 0)
                         .background(
@@ -623,6 +644,9 @@ struct ChatPane: View {
                             ProgressView().frame(width: 120, height: 120)
                         }
                     }
+                }
+                ForEach(videoPathLines(m.text), id: \.absoluteString) { url in
+                    VideoBubble(url: url)
                 }
                 ForEach(Array(voiceLines(m.text).enumerated()), id: \.offset) { _, item in
                     VoiceBubble(url: item.0, label: item.1)

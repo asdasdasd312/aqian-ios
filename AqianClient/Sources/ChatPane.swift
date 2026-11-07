@@ -73,6 +73,7 @@ struct ChatPane: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 26) {
+                        Color.clear.frame(height: 10)
                         if unread > 0 {
                             Button {
                                 if let first = msgs.first(where: { $0.t > seenAt }) {
@@ -150,6 +151,16 @@ struct ChatPane: View {
                     .padding(.bottom, 12)
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .overlay(alignment: .top) {
+                    // 滚上去的那一行会被列表顶边硬切一半，看着像「字被压住」。
+                    // 加一层同色渐隐，切边就变成淡出。
+                    LinearGradient(
+                        colors: [Color(red: 0.031, green: 0.039, blue: 0.055), Color(red: 0.031, green: 0.039, blue: 0.055).opacity(0)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .frame(height: 26)
+                    .allowsHitTesting(false)
+                }
                 .fullScreenCover(item: $previewItem) { item in
                     ImageViewer(url: item.url)
                 }

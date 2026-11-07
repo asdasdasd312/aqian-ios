@@ -401,6 +401,15 @@ struct ChatPane: View {
         return "文件 · 已收到"
     }
 
+    /// 回执那行后面的正文（「图 + 一句话」时，字不能被标签吃掉）
+    private func receiptTail(_ text: String) -> String {
+        let lines = text.split(separator: "
+", omittingEmptySubsequences: false)
+        guard lines.count > 1 else { return "" }
+        return lines.dropFirst().joined(separator: "
+").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     @ViewBuilder
     private func row(_ m: Msg) -> some View {
         if let tag = receiptTag(m.text), let path = receiptPath(m.text), let url = fileURL(path) {
@@ -423,6 +432,17 @@ struct ChatPane: View {
                 Text(tag)
                     .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.45))
+                let tail = receiptTail(m.text)
+                if !tail.isEmpty {
+                    Text(tail)
+                        .font(.system(size: 16))
+                        .lineSpacing(5)
+                        .foregroundStyle(.white.opacity(0.9))
+                        .padding(.vertical, 9).padding(.horizontal, 14)
+                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Color(red: 0.13, green: 0.16, blue: 0.23)))
+                        .textSelection(.enabled)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.vertical, 2)

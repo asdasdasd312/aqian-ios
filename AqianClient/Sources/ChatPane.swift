@@ -526,7 +526,7 @@ struct ChatPane: View {
     /// 长链接中间省略成「域名/…/尾段」，但点下去仍是真的地址、长按能复制。
     private func linkify(_ s: String) -> AttributedString {
         var out = AttributedString()
-        guard let re = try? NSRegularExpression(pattern: "https?://[^\s\u{3000}，。；、）】]+") else {
+        guard let re = try? NSRegularExpression(pattern: "https?://[^\\s\\u{3000}，。；、）】]+") else {
             return AttributedString(s)
         }
         let ns = s as NSString

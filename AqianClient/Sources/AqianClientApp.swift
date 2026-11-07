@@ -33,6 +33,7 @@ struct SetupView: View {
     @State private var url2 = ""
     @State private var url3 = ""
     @State private var key = ""
+    @AppStorage("voice_url") private var voiceURL = ""
 
     var body: some View {
         Form {
@@ -56,6 +57,15 @@ struct SetupView: View {
                 TextField("phone_token", text: $key)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+            }
+            Section("语音桥（打电话用）") {
+                TextField("wss://… 或留空按网关主机推", text: $voiceURL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                Text("留空时用 ws://<网关主机>:57942/ws，只在同一局域网内可用。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             Section("推送（实验）") {
                 Button("申请通知权限") { PushBridge.ask() }

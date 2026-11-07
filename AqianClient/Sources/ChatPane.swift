@@ -151,17 +151,18 @@ struct ChatPane: View {
                     .padding(.bottom, 12)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .overlay(alignment: .top) {
-                    // 滚上去的那一行会被列表顶边硬切一半，看着像「字被压住」。
-                    // 加一层同色渐隐，切边就变成淡出。
+                .mask(alignment: .top) {
+                    // 背景是一张图（AppBackground），盖一层「同色」会露出一条硬边，
+                    // 所以改成用遮罩让内容自己淡出——底下露出来的是真正的背景。
                     LinearGradient(
                         stops: [
-                            .init(color: Color(red: 0.031, green: 0.039, blue: 0.055), location: 0.0),
-                            .init(color: Color(red: 0.031, green: 0.039, blue: 0.055).opacity(0.92), location: 0.45),
-                            .init(color: Color(red: 0.031, green: 0.039, blue: 0.055).opacity(0), location: 1.0)
+                            .init(color: .clear, location: 0.0),
+                            .init(color: .black.opacity(0.6), location: 0.035),
+                            .init(color: .black, location: 0.07)
                         ],
                         startPoint: .top, endPoint: .bottom
                     )
+                }
                     .frame(height: 44)
                     .allowsHitTesting(false)
                 }

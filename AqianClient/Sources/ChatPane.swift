@@ -18,6 +18,8 @@ struct ChatPane: View {
     @AppStorage("gw_url") private var gwURL = ""
     @AppStorage("gw_key") private var gwKey = ""
     @State private var showSetup = false
+    /// 点开的图（全屏看/存相册）
+    @State private var previewItem: PreviewItem?
     let session: SessionRow
     var onLongPressTitle: () -> Void
     var onPick: (SessionRow) -> Void
@@ -146,6 +148,9 @@ struct ChatPane: View {
                     .padding(.bottom, 12)
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .fullScreenCover(item: $previewItem) { item in
+                    ImageViewer(url: item.url)
+                }
                 .onChange(of: msgs.count) { _ in
                     guard let last = msgs.last else { return }
                     // 一条「长文 + 下面挂图」比屏幕还高，滚到底会把上半截文字顶出去。
@@ -461,6 +466,7 @@ struct ChatPane: View {
                             img.resizable().scaledToFit()
                                 .frame(maxWidth: 240, maxHeight: 320)
                                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .onTapGesture { previewItem = PreviewItem(url) }
                         } else if phase.error != nil {
                             Text("[图] 没取到").font(.system(size: 13)).foregroundStyle(.secondary)
                         } else {
@@ -910,5 +916,93 @@ struct VoiceBubble: View {
         playing = false
         progress = 0
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+    }
+}
+
+/// 全屏预览用的小包装（不直接让 URL 遵循 Identifiable，省得跟系统扩展打架）
+struct PreviewItem: Identifiable {
+    let id: String
+    let url: URL
+    init(_ url: URL) { self.id = url.absoluteString; self.url = url }
+}
+
+/// 全屏看一张图：双指放大、拖动、右上角存到相册。
+struct ImageViewer: View {
+    let url: URL
+    @Environment(\.dismiss) private var dismiss
+    @State private var scale: CGFloat = 1
+    @State private var lastScale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+    @State private var saved = false
+    @State private var failed = false
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let img):
+                    img.resizable().scaledToFit()
+                        .scaleEffect(scale)
+                        .offset(offset)
+                        .gesture(
+                            MagnificationGesture()
+                                .onChanged { v in scale = max(1, min(5, lastScale * v)) }
+                                .onEnded { _ in lastScale = scale }
+                        )
+                        .simultaneousGesture(
+                            DragGesture()
+                                .onChanged { v in
+                                    guard scale > 1 else { return }
+                                    offset = CGSize(width: lastOffset.width + v.translation.width,
+                                                    height: lastOffset.height + v.translation.height)
+                                }
+                                .onEnded { _ in lastOffset = offset }
+                        )
+                        .onTapGesture(count: 2) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                scale = scale > 1 ? 1 : 2.2
+                                lastScale = scale
+                                if scale == 1 { offset = .zero; lastOffset = .zero }
+                            }
+                        }
+                case .failure:
+                    Text("这张没取到").foregroundStyle(.white.opacity(0.6))
+                default:
+                    ProgressView().tint(.white)
+                }
+            }
+            VStack {
+                HStack {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark").font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.8))
+                            .padding(12)
+                            .background(Circle().fill(Color.white.opacity(0.10)))
+                    }
+                    Spacer()
+                    Button { save() } label: {
+                        Text(saved ? "已存" : "存到相册")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .padding(.horizontal, 14).padding(.vertical, 9)
+                            .background(Capsule().fill(Color.white.opacity(0.12)))
+                    }
+                    .disabled(saved || failed)
+                }
+                .padding(.horizontal, 18).padding(.top, 8)
+                Spacer()
+            }
+        }
+    }
+
+    private func save() {
+        Task {
+            guard let data = try? await URLSession.shared.data(from: url).0,
+                  let img = UIImage(data: data) else { failed = true; return }
+            UIImageWriteToSavedPhotosAlbum(img, nil, nil, nil)
+            saved = true
+        }
     }
 }

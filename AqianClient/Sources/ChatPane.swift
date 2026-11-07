@@ -418,6 +418,7 @@ struct ChatPane: View {
                         img.resizable().scaledToFit()
                             .frame(maxWidth: 200, maxHeight: 260)
                             .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .onTapGesture { previewItem = PreviewItem(url) }
                     case .failure:
                         Text("[图] 没取到").font(.system(size: 12))
                             .foregroundStyle(.white.opacity(0.4))

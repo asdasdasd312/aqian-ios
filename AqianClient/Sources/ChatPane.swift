@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import AVFoundation
 import AVKit
 import UserNotifications
@@ -46,6 +47,8 @@ struct ChatPane: View {
     @State private var justBack = false
     @State private var pickPhoto = false
     @State private var pickFile = false
+    /// 刚选完、还没等服务器回图时先用本地那张，避免灰块
+    @State private var localThumbs: [String: UIImage] = [:]
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var uploading = false
     @State private var pending: [PendingMsg] = []
@@ -756,7 +759,10 @@ struct ChatPane: View {
 
             Menu {
                 Button { pickPhoto = true } label: { Label(sendOriginal ? "照片（原图）" : "照片", systemImage: "photo") }
-                Button { pickFile = true } label: { Label("文件", systemImage: "doc") }
+                Button {
+                    // Menu 收起的动画期间直接置位，fileImporter 有时不弹；挪到下一拍。
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { pickFile = true }
+                } label: { Label("文件", systemImage: "doc") }
                 Toggle("发原图", isOn: $sendOriginal)
             } label: {
                 Image(systemName: uploading ? "arrow.triangle.2.circlepath" : "plus")
@@ -968,6 +974,17 @@ struct ChatPane: View {
         return out.jpegData(compressionQuality: 0.85) ?? data
     }
 
+    /// 本地方形缩略图：先按 CGImage 居中裁方，再交给 SwiftUI 缩放。
+    private func downscaledThumb(_ data: Data) -> UIImage? {
+        guard let img = UIImage(data: data), let cg = img.cgImage else { return nil }
+        let side = min(cg.width, cg.height)
+        guard side > 0 else { return nil }
+        let rect = CGRect(x: (cg.width - side) / 2, y: (cg.height - side) / 2,
+                          width: side, height: side)
+        guard let cropped = cg.cropping(to: rect) else { return nil }
+        return UIImage(cgImage: cropped, scale: img.scale, orientation: img.imageOrientation)
+    }
+
     private func showToast(_ text: String?, seconds: Double = 3.0) {
         toastTask?.cancel()
         withAnimation { toast = text }
@@ -983,6 +1000,7 @@ struct ChatPane: View {
         uploading = true
         do {
             let path = try await api.upload(shrink(data), filename: name)
+            if let img = downscaledThumb(data) { localThumbs[path] = img }
             attachPaths.append(path)
             if !id.isEmpty { attachIDs.append(id) }
             showToast("带上了 \(attachPaths.count) 张 · 接着打字就一起发", seconds: 3.0)
@@ -1008,19 +1026,28 @@ struct ChatPane: View {
                                 .onTapGesture {
                                     if let u = rawFileURL(path) { previewItem = PreviewItem(u) }
                                 }
+                        } else if let local = localThumbs[path] {
+                            Image(uiImage: local)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                .onTapGesture {
+                                    if let u = rawFileURL(path) { previewItem = PreviewItem(u) }
+                                }
                         } else {
-                        AsyncImage(url: rawFileURL(path)) { phase in
-                            if let img = phase.image {
-                                img.resizable().scaledToFill()
-                            } else {
-                                Color.white.opacity(0.06)
+                            AsyncImage(url: rawFileURL(path)) { phase in
+                                if let img = phase.image {
+                                    img.resizable().scaledToFill()
+                                } else {
+                                    Color.white.opacity(0.06)
+                                }
                             }
-                        }
-                        .frame(width: 56, height: 56)
-                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                        .onTapGesture {
-                            if let u = rawFileURL(path) { previewItem = PreviewItem(u) }
-                        }
+                            .frame(width: 56, height: 56)
+                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                            .onTapGesture {
+                                if let u = rawFileURL(path) { previewItem = PreviewItem(u) }
+                            }
                         }
 
                         Button {

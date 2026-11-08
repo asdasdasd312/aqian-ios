@@ -225,14 +225,12 @@ struct ChatPane: View {
         .photosPicker(isPresented: $pickPhoto, selection: $photoItems, maxSelectionCount: 9,
                       matching: .any(of: [.images, .videos]),
                       preferredItemEncoding: sendOriginal ? .current : .automatic)
-        .fileImporter(isPresented: $pickFile, allowedContentTypes: [.item],
-                      allowsMultipleSelection: false) { result in
-            switch result {
-            case .success(let urls):
-                guard let url = urls.first else { return }
+        .sheet(isPresented: $pickFile) {
+            DocumentPicker { url in
+                pickFile = false
                 Task { await uploadFile(url) }
-            case .failure(let err):
-                showToast("选不了文件：" + err.localizedDescription, seconds: 4)
+            } onCancel: {
+                pickFile = false
             }
         }
         .onChange(of: photoItems) { items in
@@ -760,8 +758,7 @@ struct ChatPane: View {
             Menu {
                 Button { pickPhoto = true } label: { Label(sendOriginal ? "照片（原图）" : "照片", systemImage: "photo") }
                 Button {
-                    // Menu 收起的动画期间直接置位，fileImporter 有时不弹；挪到下一拍。
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { pickFile = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { pickFile = true }
                 } label: { Label("文件", systemImage: "doc") }
                 Toggle("发原图", isOn: $sendOriginal)
             } label: {
@@ -1366,6 +1363,41 @@ struct VideoThumb: View {
             if let cg = try? await gen.image(at: .zero).image {
                 image = UIImage(cgImage: cg)
             }
+        }
+    }
+}
+
+/// SwiftUI 的 fileImporter 在菜单收起后的同一帧里经常不弹（点了没反应、也不报错）。
+/// 这里直接包 UIDocumentPickerViewController，asCopy = true 把文件拷到沙盒临时目录，
+/// 也就不再依赖 security-scoped 访问。
+struct DocumentPicker: UIViewControllerRepresentable {
+    var onPick: (URL) -> Void
+    var onCancel: () -> Void
+
+    func makeCoordinator() -> Coord { Coord(onPick: onPick, onCancel: onCancel) }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+        picker.allowsMultipleSelection = false
+        picker.shouldShowFileExtensions = true
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    final class Coord: NSObject, UIDocumentPickerDelegate {
+        let onPick: (URL) -> Void
+        let onCancel: () -> Void
+        init(onPick: @escaping (URL) -> Void, onCancel: @escaping () -> Void) {
+            self.onPick = onPick
+            self.onCancel = onCancel
+        }
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            if let u = urls.first { onPick(u) } else { onCancel() }
+        }
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            onCancel()
         }
     }
 }

@@ -222,10 +222,14 @@ struct ChatPane: View {
         .photosPicker(isPresented: $pickPhoto, selection: $photoItems, maxSelectionCount: 9,
                       matching: .any(of: [.images, .videos]),
                       preferredItemEncoding: sendOriginal ? .current : .automatic)
-        .fileImporter(isPresented: $pickFile, allowedContentTypes: [.data, .image, .pdf, .plainText],
+        .fileImporter(isPresented: $pickFile, allowedContentTypes: [.item],
                       allowsMultipleSelection: false) { result in
-            if case .success(let urls) = result, let url = urls.first {
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
                 Task { await uploadFile(url) }
+            case .failure(let err):
+                showToast("选不了文件：" + err.localizedDescription, seconds: 4)
             }
         }
         .onChange(of: photoItems) { items in
@@ -936,8 +940,15 @@ struct ChatPane: View {
         let got = url.startAccessingSecurityScopedResource()
         defer { if got { url.stopAccessingSecurityScopedResource() } }
         let name = url.lastPathComponent
-        if let data = try? Data(contentsOf: url) {
+        do {
+            let data = try Data(contentsOf: url)
+            guard !data.isEmpty else {
+                showToast("这个文件是空的（0 字节）", seconds: 3)
+                return
+            }
             await uploadData(data, name: name)
+        } catch {
+            showToast("读不到这个文件：" + error.localizedDescription, seconds: 4)
         }
     }
 

@@ -398,6 +398,11 @@ struct ChatPane: View {
         return path
     }
 
+    private func isImage(_ path: String) -> Bool {
+        let low = path.lowercased()
+        return [".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".webp"].contains { low.hasSuffix($0) }
+    }
+
     private func receiptPaths(_ text: String) -> [String] {
         let t = text.trimmingCharacters(in: .whitespaces)
         guard t.hasPrefix("[手机] 发来") else { return [] }
@@ -501,29 +506,35 @@ struct ChatPane: View {
     @ViewBuilder
     private func row(_ m: Msg) -> some View {
         if let tag = receiptTag(m.text), !receiptPaths(m.text).isEmpty {
-            let urls = receiptPaths(m.text).compactMap { fileURL($0) }
+            let paths = receiptPaths(m.text).filter { isImage($0) }
             VStack(alignment: .trailing, spacing: 4) {
                 HStack(spacing: 6) {
-                    ForEach(Array(urls.prefix(3)), id: \.absoluteString) { url in
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let img):
-                                img.resizable().scaledToFill()
-                                    .frame(maxWidth: 160, maxHeight: 210)
-                                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                                    .onTapGesture { previewItem = PreviewItem(url) }
-                            case .failure:
-                                Text("[图] 没取到").font(.system(size: 12))
-                                    .foregroundStyle(.white.opacity(0.4))
-                            default:
-                                RoundedRectangle(cornerRadius: 14)
-                                    .fill(Color.white.opacity(0.06))
-                                    .frame(width: 120, height: 160)
+                    ForEach(Array(paths.prefix(3)), id: \.self) { path in
+                        if let local = localThumbs[path] {
+                            Image(uiImage: local).resizable().scaledToFill()
+                                .frame(maxWidth: 160, maxHeight: 210)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                        } else if let url = fileURL(path) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let img):
+                                    img.resizable().scaledToFill()
+                                        .frame(maxWidth: 160, maxHeight: 210)
+                                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                                        .onTapGesture { previewItem = PreviewItem(url) }
+                                case .failure:
+                                    Text("这张没取到").font(.system(size: 12))
+                                        .foregroundStyle(.white.opacity(0.4))
+                                default:
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .fill(Color.white.opacity(0.06))
+                                        .frame(width: 120, height: 160)
+                                }
                             }
                         }
                     }
-                    if urls.count > 3 {
-                        Text("+\(urls.count - 3)").font(.system(size: 13))
+                    if paths.count > 3 {
+                        Text("+\(paths.count - 3)").font(.system(size: 13))
                             .foregroundStyle(.white.opacity(0.5))
                     }
                 }
@@ -1148,7 +1159,11 @@ struct VoiceBubble: View {
 
     private var subtitle: String {
         if failed { return "放不出来" }
-        if duration > 0 { return String(format: "%.0f″ / %.0f″", progress * duration, duration) }
+        if duration > 0 {
+            // 一直保留一位小数：6.4″ 不要被格式化成 6″
+            let now = progress * duration
+            return String(format: "%.1f″ / %.1f″", now, duration)
+        }
         return label
     }
 

@@ -540,14 +540,28 @@ struct ChatPane: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.vertical, 2)
         } else if let tag = receiptTag(m.text) {
-            HStack {
-                Spacer()
-                Text(tag)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.45))
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(Capsule().fill(Color.white.opacity(0.06)))
-                Spacer()
+            VStack(alignment: .trailing, spacing: 4) {
+                HStack {
+                    Spacer()
+                    Text(tag)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.45))
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(Capsule().fill(Color.white.opacity(0.06)))
+                    Spacer()
+                }
+                // 单发非图片文件时没有缩略图，但「回执 + 跟着说的话」里的话不能吞掉
+                let tail = receiptTail(m.text)
+                if !tail.isEmpty {
+                    Text(linkify(display(tail)))
+                        .font(.system(size: 16))
+                        .lineSpacing(5)
+                        .foregroundStyle(.white.opacity(0.9))
+                        .padding(.vertical, 9).padding(.horizontal, 14)
+                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Color(red: 0.13, green: 0.16, blue: 0.23)))
+                        .textSelection(.enabled)
+                }
             }
             .padding(.vertical, 2)
         } else {
@@ -973,6 +987,17 @@ struct ChatPane: View {
             HStack(spacing: 8) {
                 ForEach(Array(attachPaths.enumerated()), id: \.offset) { i, path in
                     ZStack(alignment: .topTrailing) {
+                        if isVideo(path) {
+                            VideoThumb(url: rawFileURL(path))
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                .overlay(Image(systemName: "play.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.white.opacity(0.85)))
+                                .onTapGesture {
+                                    if let u = rawFileURL(path) { previewItem = PreviewItem(u) }
+                                }
+                        } else {
                         AsyncImage(url: rawFileURL(path)) { phase in
                             if let img = phase.image {
                                 img.resizable().scaledToFill()
@@ -984,6 +1009,7 @@ struct ChatPane: View {
                         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                         .onTapGesture {
                             if let u = rawFileURL(path) { previewItem = PreviewItem(u) }
+                        }
                         }
 
                         Button {
@@ -1001,6 +1027,12 @@ struct ChatPane: View {
             .padding(.horizontal, 16)
         }
         .frame(height: 64)
+    }
+
+
+    private func isVideo(_ path: String) -> Bool {
+        let low = path.lowercased()
+        return low.hasSuffix(".mp4") || low.hasSuffix(".mov") || low.hasSuffix(".m4v")
     }
 
     private func startPolling() {
@@ -1270,5 +1302,32 @@ struct MeSheet: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(red: 0.05, green: 0.06, blue: 0.09))
+    }
+}
+
+
+/// 视频缩略图：AVAssetImageGenerator 抽第一帧，缓存到临时目录。
+struct VideoThumb: View {
+    let url: URL?
+    @State private var image: UIImage?
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                Color.white.opacity(0.06)
+            }
+        }
+        .task(id: url?.absoluteString ?? "") {
+            guard let url, image == nil else { return }
+            let asset = AVURLAsset(url: url)
+            let gen = AVAssetImageGenerator(asset: asset)
+            gen.appliesPreferredTrackTransform = true
+            gen.maximumSize = CGSize(width: 240, height: 240)
+            if let cg = try? await gen.image(at: .zero).image {
+                image = UIImage(cgImage: cg)
+            }
+        }
     }
 }

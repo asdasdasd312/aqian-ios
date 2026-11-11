@@ -10,6 +10,7 @@ struct LampRootView: View {
     @State private var sessions: [SessionRow] = []
     @State private var current: SessionRow?
     @State private var showList = false
+    @State private var showSetup = false
     @State private var loadError: String?
 
     var body: some View {
@@ -30,6 +31,9 @@ struct LampRootView: View {
                         .multilineTextAlignment(.center).padding(.horizontal, 40)
                     Button("再试一次") { Task { await boot() } }
                         .buttonStyle(.borderedProminent)
+                    Button("设置地址/口令") { showSetup = true }
+                        .buttonStyle(.bordered)
+                        .font(.footnote)
                 }
             } else {
                 ProgressView().tint(.white.opacity(0.6))
@@ -52,6 +56,9 @@ struct LampRootView: View {
                     }
             }
             .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showSetup, onDismiss: { Task { await boot() } }) {
+            SetupView(gwURL: $gwURL, gwKey: $gwKey)
         }
     }
 

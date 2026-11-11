@@ -26,6 +26,7 @@ struct RootView: View {
 }
 
 struct SetupView: View {
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var bridge = PushState.shared
     @Binding var gwURL: String
     @Binding var gwKey: String
@@ -84,6 +85,7 @@ struct SetupView: View {
                     gwKey = key.trimmingCharacters(in: .whitespaces)
                     UserDefaults.standard.set(url2.trimmingCharacters(in: .whitespaces), forKey: "gw_url2")
                     UserDefaults.standard.set(url3.trimmingCharacters(in: .whitespaces), forKey: "gw_url3")
+                    dismiss()
                 }
                 .disabled(url.isEmpty || key.isEmpty)
             }

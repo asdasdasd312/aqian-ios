@@ -809,7 +809,7 @@ struct ChatPane: View {
                             guard let data = voice.stop() else { return }
                             voiceBusy = true
                             Task {
-                                _ = try? await api.voice(data)
+                                _ = try? await api.voice(data, session: session.id)
                                 voiceBusy = false
                                 await load()
                             }
@@ -924,7 +924,12 @@ struct ChatPane: View {
     private func deliver(_ item: PendingMsg) async {
         sending = true
         do {
-            try await api.send(item.text, attach: item.attach)
+            let ack = try await api.send(item.text, attach: item.attach, session: session.id)
+            // 网关兜底（选中房间还没落盘/认不出）时，必须让他看见这条去了哪。
+            if let to = ack.to, !to.isEmpty, to != session.id {
+                let name = (ack.toTitle?.isEmpty == false) ? ack.toTitle! : to
+                showToast("这条发给了「\(name)」", seconds: 2.5)
+            }
             // 先标记「已送达」但继续显示：服务端那条要等网关重读会话才出现，中间有几秒空白。
             if let i = pending.firstIndex(where: { $0.id == item.id }) { pending[i].sent = true }
             await load()

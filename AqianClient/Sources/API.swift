@@ -50,6 +50,14 @@ struct MessagesResp: Decodable {
 }
 struct OkResp: Decodable { let ok: Bool }
 
+/// /api/send 的回执：这条字最后排给了哪个房间（网关没认出 session 时会兜底到最近活跃的）。
+struct SendAck: Decodable {
+    let ok: Bool
+    let to: String?
+    let toTitle: String?
+    enum CodingKeys: String, CodingKey { case ok, to, toTitle = "to_title" }
+}
+
 struct Presence: Decodable {
     let state: String   // busy / idle / away
     let idle_seconds: Int
@@ -233,7 +241,7 @@ final class API {
     }
 
     /// 语音：把 m4a 丢给网关，网关转成字再进会话
-    func voice(_ data: Data) async throws -> String {
+    func voice(_ data: Data, session: String = "") async throws -> String {
         guard var c = URLComponents(string: base.trimmingCharacters(in: .whitespaces)) else {
             throw URLError(.badURL)
         }
@@ -244,6 +252,7 @@ final class API {
         req.timeoutInterval = 180
         req.setValue(key, forHTTPHeaderField: "X-Aqian-Key")
         req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        if !session.isEmpty { req.setValue(session, forHTTPHeaderField: "X-Aqian-Session") }
         let (data2, resp) = try await URLSession.shared.upload(for: req, from: data)
         guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
             throw URLError(.badServerResponse)
@@ -252,12 +261,15 @@ final class API {
         return (try? JSONDecoder().decode(R.self, from: data2).text) ?? ""
     }
 
-    func send(_ text: String, attach: String = "") async throws {
+    /// session：当前看的是哪个房间。网关据此把这条字只投进那个会话；
+    /// 不传（或网关认不出）时网关兜底给最近活跃的房间，回执里告诉我们发给了谁。
+    func send(_ text: String, attach: String = "", session: String = "") async throws -> SendAck {
         var payload: [String: Any] = ["text": text]
         if !attach.isEmpty { payload["attach"] = attach }
+        if !session.isEmpty { payload["session"] = session }
         let data = try JSONSerialization.data(withJSONObject: payload)
         guard let req = request("/api/send", method: "POST", body: data) else { throw URLError(.badURL) }
         let (resp, _) = try await URLSession.shared.data(for: req)
-        _ = try? JSONDecoder().decode(OkResp.self, from: resp)
+        return (try? JSONDecoder().decode(SendAck.self, from: resp)) ?? SendAck(ok: true, to: nil, toTitle: nil)
     }
 }

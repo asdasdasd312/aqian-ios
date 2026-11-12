@@ -41,6 +41,7 @@ struct ChatPane: View {
     @State private var stickerCatalog: StickerCatalog?
     @State private var stickerPack = ""
     @State private var stickerError = false
+    @State private var pendingSticker: String?
     @State private var unread = 0
     @State private var showNote = false
     @State private var lastUserDrag = Date.distantPast
@@ -787,6 +788,15 @@ struct ChatPane: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         }
                         .buttonStyle(.plain)
+                        .overlay {
+                            if pendingSticker == st.hash {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(Color.black.opacity(0.5))
+                                    ProgressView().tint(.white)
+                                }
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, 12)
@@ -836,8 +846,11 @@ struct ChatPane: View {
         guard !sending else { return }
         sending = true
         defer { sending = false }
+        pendingSticker = st.hash
+        defer { pendingSticker = nil }
         do {
             _ = try await api.sendSticker(hash: st.hash, name: st.name, session: session.id)
+            showToast("已发出", seconds: 1.2)
             showStickers = false
             await load()
         } catch {

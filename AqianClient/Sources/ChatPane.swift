@@ -40,6 +40,7 @@ struct ChatPane: View {
     @State private var showStickers = false
     @State private var stickerCatalog: StickerCatalog?
     @State private var stickerPack = ""
+    @State private var stickerError = false
     @State private var unread = 0
     @State private var showNote = false
     @State private var lastUserDrag = Date.distantPast
@@ -794,6 +795,11 @@ struct ChatPane: View {
             .frame(height: 208)
         }
         .background(Color.white.opacity(0.03))
+        .alert("没发出去", isPresented: $stickerError) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text("网好像断了，等它回来再点一次。")
+        }
     }
 
     private var filteredStickers: [Sticker] {
@@ -818,7 +824,7 @@ struct ChatPane: View {
     private func stickerImageURL(_ hash: String) -> URL? {
         let base = (UserDefaults.standard.string(forKey: "gw_url") ?? "").trimmingCharacters(in: .whitespaces)
         guard !base.isEmpty else { return nil }
-        return URL(string: base + "/sticker/" + hash + ".gif")
+        return URL(string: base + "/sticker/" + hash + ".gif?thumb=1")
     }
 
     private func loadStickers() async {
@@ -830,9 +836,14 @@ struct ChatPane: View {
         guard !sending else { return }
         sending = true
         defer { sending = false }
-        _ = try? await api.sendSticker(hash: st.hash, name: st.name, session: session.id)
-        showStickers = false
-        await load()
+        do {
+            _ = try await api.sendSticker(hash: st.hash, name: st.name, session: session.id)
+            showStickers = false
+            await load()
+        } catch {
+            // 断网时不假装发成功——留着面板，告诉他没发出去
+            stickerError = true
+        }
     }
 
     private var composer: some View {

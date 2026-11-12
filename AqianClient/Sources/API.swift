@@ -30,6 +30,26 @@ struct Msg: Decodable, Identifiable {
     // 撞了 SwiftUI 就会把两条画在同一个位置（字重叠）并让滚动位置乱跳。
     var id: String { "\(t)#\(role)#\(text.count)#\(text.prefix(24))" }
     var isMe: Bool { role == "user" }
+
+    /// 经 lamp 说出去的话（语音、表情、我主动找他）被宿主当成“他的话”追加进会话，
+    /// 所以网关给这类文字盖了一个看不见的 U+2063。认出来就画在我这一侧，并把记号去掉。
+    static let selfMark = "\u{2063}"
+    enum CodingKeys: String, CodingKey { case t, role, text, ask }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        t = try c.decode(Double.self, forKey: .t)
+        let r = try c.decode(String.self, forKey: .role)
+        var x = try c.decode(String.self, forKey: .text)
+        if x.hasPrefix(Msg.selfMark) {
+            x.removeFirst()
+            role = (r == "user") ? "assistant" : r
+        } else {
+            role = r
+        }
+        text = x
+        ask = try c.decodeIfPresent(AskBox.self, forKey: .ask)
+    }
 }
 
 struct SessionsResp: Decodable { let sessions: [SessionRow] }

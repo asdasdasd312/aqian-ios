@@ -348,10 +348,12 @@ struct ChatPane: View {
         guard line.hasPrefix("!["), let open = line.range(of: "]("),
               let close = line.range(of: ")", options: .backwards) else { return nil }
         let raw = String(line[open.upperBound..<close.lowerBound])
-        guard let hash = raw.split(separator: "/").last else { return nil }
+        guard let rawHash = raw.split(separator: "/").last else { return nil }
+        // 0.74：聊天里点开的是静态一帧（600px JPEG，几十 KB），不拉 388MB 的原 gif
+        let h = rawHash.hasSuffix(".gif") ? String(rawHash.dropLast(4)) : String(rawHash)
         let base = (UserDefaults.standard.string(forKey: "gw_url") ?? "").trimmingCharacters(in: .whitespaces)
         guard !base.isEmpty else { return nil }
-        return URL(string: base + "/sticker/" + hash)
+        return URL(string: base + "/sticker/" + h + ".gif?w=600")
     }
 
     /// 我要给他看一张图时，正文里会写一行 `[图] D:\阿潜\画-xxx.jpg`。

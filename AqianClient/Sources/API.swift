@@ -58,6 +58,26 @@ struct SendAck: Decodable {
     enum CodingKeys: String, CodingKey { case ok, to, toTitle = "to_title" }
 }
 
+struct Sticker: Decodable, Identifiable {
+    let hash: String
+    let name: String
+    let pack: String
+    var id: String { hash }
+}
+
+struct StickerPack: Decodable, Identifiable {
+    let key: String
+    let label: String
+    let count: Int?
+    var id: String { key }
+}
+
+struct StickerCatalog: Decodable {
+    let ok: Bool
+    let packs: [StickerPack]
+    let items: [Sticker]
+}
+
 struct Presence: Decodable {
     let state: String   // busy / idle / away
     let idle_seconds: Int
@@ -263,6 +283,21 @@ final class API {
 
     /// session：当前看的是哪个房间。网关据此把这条字只投进那个会话；
     /// 不传（或网关认不出）时网关兜底给最近活跃的房间，回执里告诉我们发给了谁。
+    func stickers() async throws -> StickerCatalog {
+        let data = try await get("/api/stickers")
+        return try JSONDecoder().decode(StickerCatalog.self, from: data)
+    }
+
+    /// 发一个表情包：网关把它变成 lamp 里一条 `![名字](sticker://hash)`。
+    func sendSticker(hash: String, name: String, session: String = "") async throws -> SendAck {
+        var payload: [String: Any] = ["hash": hash, "name": name]
+        if !session.isEmpty { payload["session"] = session }
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        guard let req = request("/api/sticker/send", method: "POST", body: data) else { throw URLError(.badURL) }
+        let (resp, _) = try await URLSession.shared.data(for: req)
+        return (try? JSONDecoder().decode(SendAck.self, from: resp)) ?? SendAck(ok: true, to: nil, toTitle: nil)
+    }
+
     func send(_ text: String, attach: String = "", session: String = "") async throws -> SendAck {
         var payload: [String: Any] = ["text": text]
         if !attach.isEmpty { payload["attach"] = attach }

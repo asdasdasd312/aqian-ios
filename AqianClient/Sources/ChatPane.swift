@@ -37,6 +37,9 @@ struct ChatPane: View {
     @State private var error: String?
     @State private var presence: Presence?
     @State private var voiceMode = false
+    @State private var showStickers = false
+    @State private var stickerCatalog: StickerCatalog?
+    @State private var stickerPack = ""
     @State private var unread = 0
     @State private var showNote = false
     @State private var lastUserDrag = Date.distantPast
@@ -752,9 +755,90 @@ struct ChatPane: View {
 
     // MARK: - 输入
 
+    // MARK: - 表情包
+
+    private var stickerPanel: some View {
+        VStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    packChip("", "全部")
+                    ForEach(stickerCatalog?.packs ?? []) { p in
+                        packChip(p.key, p.label)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+            }
+            ScrollView {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4),
+                          spacing: 6) {
+                    ForEach(filteredStickers) { st in
+                        Button {
+                            Task { await sendSticker(st) }
+                        } label: {
+                            AsyncImage(url: stickerImageURL(st.hash)) { img in
+                                img.resizable().scaledToFit()
+                            } placeholder: {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color.white.opacity(0.05))
+                            }
+                            .frame(height: 66)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
+            .frame(height: 208)
+        }
+        .background(Color.white.opacity(0.03))
+    }
+
+    private var filteredStickers: [Sticker] {
+        guard let all = stickerCatalog?.items else { return [] }
+        return stickerPack.isEmpty ? all : all.filter { $0.pack == stickerPack }
+    }
+
+    private func packChip(_ key: String, _ label: String) -> some View {
+        Button {
+            stickerPack = key
+        } label: {
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(stickerPack == key ? 0.95 : 0.5))
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(Capsule().fill(Color.white.opacity(stickerPack == key ? 0.12 : 0.05)))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 表情图片走网关的 /sticker/<hash>.gif（那条路不校验口令）
+    private func stickerImageURL(_ hash: String) -> URL? {
+        let base = (UserDefaults.standard.string(forKey: "gw_url") ?? "").trimmingCharacters(in: .whitespaces)
+        guard !base.isEmpty else { return nil }
+        return URL(string: base + "/sticker/" + hash + ".gif")
+    }
+
+    private func loadStickers() async {
+        if stickerCatalog != nil { return }
+        if let c = try? await api.stickers() { stickerCatalog = c }
+    }
+
+    private func sendSticker(_ st: Sticker) async {
+        guard !sending else { return }
+        sending = true
+        defer { sending = false }
+        _ = try? await api.sendSticker(hash: st.hash, name: st.name, session: session.id)
+        showStickers = false
+        await load()
+    }
+
     private var composer: some View {
         VStack(spacing: 0) {
             if !attachPaths.isEmpty { attachStrip }
+            if showStickers { stickerPanel }
             HStack(spacing: 10) {
             Button {
                 showCall = true
@@ -779,6 +863,17 @@ struct ChatPane: View {
                     .frame(width: 34, height: 34)
             }
             .padding(.leading, 12)
+
+            Button {
+                showStickers.toggle()
+                if showStickers { Task { await loadStickers() } }
+            } label: {
+                Image(systemName: "face.smiling")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(showStickers ? 0.9 : 0.55))
+                    .frame(width: 32, height: 34)
+                    .contentShape(Rectangle())
+            }
 
             Button {
                 voiceMode.toggle()

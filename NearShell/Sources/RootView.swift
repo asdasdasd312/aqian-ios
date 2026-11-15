@@ -4,7 +4,7 @@ import UIKit
 
 struct RootView: View {
     @State private var token: String? = KeyStore.load()
-    @State private var host: String = UserDefaults.standard.string(forKey: "lamp_host") ?? "m.aqian-lamp.cn"
+    @State private var host: String = UserDefaults.standard.string(forKey: "lamp_host") ?? AppConfig.builtInHost
     @State private var state: NearWebView.LoadState = .idle
     @State private var reloadToken = 0
     @State private var showMenu = false
@@ -194,7 +194,7 @@ private struct SetupView: View {
                     Text("服务地址")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
-                    TextField("m.aqian-lamp.cn", text: $hostField)
+                    TextField(AppConfig.builtInHost, text: $hostField)
                         .textFieldStyle(.plain)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
@@ -239,7 +239,7 @@ private struct SetupView: View {
             return
         }
         var h = hostField.trimmingCharacters(in: .whitespacesAndNewlines)
-        if h.isEmpty { h = "m.aqian-lamp.cn" }
+        if h.isEmpty { h = AppConfig.builtInHost }
         if h.hasPrefix("https://") { h = String(h.dropFirst(8)) }
         if h.hasPrefix("http://") { h = String(h.dropFirst(7)) }
         while h.hasSuffix("/") { h.removeLast() }

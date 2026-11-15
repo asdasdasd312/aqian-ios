@@ -1,6 +1,20 @@
 import Foundation
 import Security
 
+/// 一点配置：默认连哪里。
+/// 放在 Info.plist 里而不是写死在代码里——打包后还能在包里查到这个值，
+/// 出了事对得上账，改起来也不用动 Swift。
+enum AppConfig {
+    /// 没存过设置时，连这个地址。
+    static var builtInHost: String {
+        if let s = Bundle.main.object(forInfoDictionaryKey: "AqianDefaultHost") as? String,
+           !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return s.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return "m.aqian-lamp.cn"
+    }
+}
+
 /// 钥匙只存在这台机器的钥匙串里，不写进包、不上报。
 enum KeyStore {
     private static let service = "com.aqian.near"

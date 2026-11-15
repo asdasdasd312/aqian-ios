@@ -1,0 +1,64 @@
+name: build-near
+
+# 这个工作流只出「接这边」的那只 App（m.aqian-lamp.cn）。
+# 老的 AqianClient（接 DSH 那边）走 build-client.yml，两者互不影响。
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - "NearShell/**"
+      - ".github/workflows/build-near.yml"
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: NearShell
+        run: |
+          xcodegen generate
+          echo "--- 生成结果 ---"
+          ls -1
+          ls -d *.xcodeproj
+
+      - name: Build (unsigned)
+        working-directory: NearShell
+        run: |
+          set -euo pipefail
+          PROJ=$(ls -d *.xcodeproj | head -1)
+          echo "project = $PROJ"
+          # 工程名不再写死：xcodegen 生成什么叫什么，避免名字对不上直接失败
+          SCHEME=$(xcodebuild -list -project "$PROJ" -json \
+            | /usr/bin/python3 -c "import json,sys; d=json.load(sys.stdin)['project']; print(d['schemes'][0])")
+          echo "scheme  = $SCHEME"
+          xcodebuild -project "$PROJ" -scheme "$SCHEME" \
+            -configuration Release -sdk iphoneos \
+            -archivePath "$RUNNER_TEMP/NearShell.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            archive | tail -n 80
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP=$(find "$RUNNER_TEMP/NearShell.xcarchive/Products/Applications" -maxdepth 1 -name "*.app" | head -1)
+          echo "app = $APP"
+          test -n "$APP"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP" && zip -qry AqianNear-unsigned.ipa Payload
+          ls -lh "$RUNNER_TEMP/AqianNear-unsigned.ipa"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: AqianNear-unsigned-ipa
+          path: ${{ runner.temp }}/AqianNear-unsigned.ipa
+          retention-days: 30

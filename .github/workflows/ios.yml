@@ -1,9 +1,20 @@
 name: build-ipa
 
+# ⚠️ 这条现在是废的，别指望它出包。2026-11-15 查过：
+#   1) 它在仓库根目录跑，根目录的 Sources/ 里有两个 @main
+#      （AqianApp.swift 和 AqianClientApp.swift），必然编译冲突；
+#   2) 下面写死 -project Aqian.xcodeproj，但根目录 project.yml 的 name 是 AqianClient，
+#      实际生成的是 AqianClient.xcodeproj，工程名对不上直接报 does not exist。
+#   真正能出包的是 build-client.yml（接 DSH 那边）和 build-near.yml（接这边）。
+# 这里只加 paths 限制，免得每次推别的目录都白跑一次失败。
 on:
   workflow_dispatch:
   push:
     branches: [ main ]
+    paths:
+      - "Sources/**"
+      - "Resources/**"
+      - "project.yml"
 
 jobs:
   build:

@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import UIKit
 
 struct RootView: View {
     @State private var token: String? = KeyStore.load()
@@ -22,7 +23,7 @@ struct RootView: View {
             Color(red: 0.02, green: 0.027, blue: 0.039).ignoresSafeArea()
 
             if let u = url {
-                NearWebView(url: url, state: $state, reloadToken: reloadToken)
+                NearWebView(url: u, state: $state, reloadToken: reloadToken)
                     .ignoresSafeArea(.container, edges: [.top, .bottom])
 
                 topProgress
@@ -204,8 +205,8 @@ private struct SetupView: View {
                         .font(.system(size: 14, design: .monospaced))
                 }
 
-                if let err {
-                    Text(err)
+                if let e = err {
+                    Text(e)
                         .font(.system(size: 12.5))
                         .foregroundStyle(Color(red: 0.95, green: 0.45, blue: 0.42))
                 }

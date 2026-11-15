@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import UIKit
 
 /// 外壳里那台浏览器：加载页面、下拉刷新、加载失败时说清是哪种失败。
 struct NearWebView: UIViewRepresentable {

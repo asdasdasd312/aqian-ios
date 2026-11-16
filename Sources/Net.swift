@@ -101,6 +101,19 @@ struct ChatAPI {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
+    /// 屋子里现在几点（跟着服务器的钟，不是手机的）
+    func roomHour() async throws -> Int {
+        struct St: Decodable { var now: String? }
+        let st: St = try await get("/api/status", [:])
+        guard let raw = st.now else { throw NSError(domain: "room", code: -1, userInfo: [NSLocalizedDescriptionKey: "没有时间"]) }
+        // "2026-11-16 21:40:03"
+        let parts = raw.split(separator: " ")
+        guard parts.count >= 2 else { throw NSError(domain: "room", code: -1, userInfo: [NSLocalizedDescriptionKey: "时间格式不对"]) }
+        let hm = parts[1].split(separator: ":")
+        guard let h = hm.first.flatMap({ Int($0) }) else { throw NSError(domain: "room", code: -1, userInfo: [NSLocalizedDescriptionKey: "时间格式不对"]) }
+        return h
+    }
+
     func history(limit: Int = 30) async throws -> [ChatRow] {
         let a = URLSession.shared
         _ = a // keep simple

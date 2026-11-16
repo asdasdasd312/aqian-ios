@@ -1,48 +1,49 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @Binding var urlString: String
+    @Binding var base: String
+    @Binding var token: String
     var onSave: () -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var draft: String = ""
+    @State private var b: String = ""
+    @State private var k: String = ""
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("地址") {
-                    TextField("https://…/?k=口令", text: $draft, axis: .vertical)
+                Section("房间地址") {
+                    TextField("http://192.168.0.233:8099", text: $b, axis: .vertical)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
-                        .lineLimit(2...4)
+                        .lineLimit(1...3)
+                }
+                Section("口令") {
+                    TextField("OA1MJ…", text: $k)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                 }
                 Section {
-                    Text("整条地址里带 `?k=` 后面的口令，别只发域名——没有口令会被挡回来。")
+                    Text("手机只是那间房的一扇窗：能看她说话、能发话过去。\n工具审批、改设置这些，仍然只能在电脑那边做。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                }
-                Section {
-                    Button("恢复默认") {
-                        draft = ContentView.defaultURL
-                    }
                 }
             }
             .navigationTitle("连接")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        urlString = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                        base = b.trimmingCharacters(in: .whitespacesAndNewlines)
+                        token = k.trimmingCharacters(in: .whitespacesAndNewlines)
                         onSave()
                         dismiss()
                     }
                 }
             }
-            .onAppear { draft = urlString }
+            .onAppear { b = base; k = token }
         }
     }
 }

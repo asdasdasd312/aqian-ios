@@ -4,7 +4,7 @@ import SwiftUI
 struct AqianApp: App {
     var body: some Scene {
         WindowGroup {
-            RootView()
+            RootView().environmentObject(ThemeStore.shared)
         }
     }
 }

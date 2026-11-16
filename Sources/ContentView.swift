@@ -11,6 +11,9 @@ struct ContentView: View {
     @State private var busy = false
     @State private var status = ""
     @State private var toast = ""
+    @State private var live = ""      // 正在逐字吐出来的那句
+    @State private var think = ""     // 这一轮的思考全文
+    @State private var thinkOpen = false
 
     private var api: ChatAPI { ChatAPI(base: base, token: token) }
 
@@ -54,6 +57,8 @@ struct ContentView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     ForEach(rows) { r in bubble(r).id(r.id) }
+                    if !think.isEmpty { thinkRow }
+                    if !live.isEmpty { bubble(ChatRow(t: "", role: "assistant", text: live)) }
                     if !status.isEmpty {
                         Text(status)
                             .font(.footnote)
@@ -85,6 +90,36 @@ struct ContentView: View {
                 .foregroundStyle(.white)
             if !mine { Spacer(minLength: 40) }
         }
+    }
+
+    private var thinkRow: some View {
+        let lastLine = think.split(separator: "\n").last.map(String.init) ?? think
+        return VStack(alignment: .leading, spacing: 4) {
+            Button {
+                withAnimation(.easeOut(duration: 0.18)) { thinkOpen.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(thinkOpen ? "思考" : "思考 · " + String(lastLine.prefix(28)))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Image(systemName: thinkOpen ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+            if thinkOpen {
+                Text(think)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(.secondary)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.05)))
+            }
+        }
+        .padding(.horizontal, 2)
     }
 
     private var inputBar: some View {
@@ -126,6 +161,9 @@ struct ContentView: View {
         draft = ""
         busy = true
         rows.append(ChatRow(t: "", role: "user", text: text))
+        live = ""
+        think = ""
+        thinkOpen = false
         status = "她在想…"
         do {
             let turn = try await api.say(text)
@@ -139,10 +177,17 @@ struct ContentView: View {
                     switch e.kind {
                     case "tool":
                         status = "她用了 " + (e.name ?? "工具")
+                    case "say_delta":
+                        live += (e.text ?? "")
+                        status = "她在说…"
                     case "say":
                         let t = (e.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                         if !t.isEmpty { lastSay = t }
+                        live = ""
                         status = "她在说…"
+                    case "think_delta":
+                        think += (e.text ?? "")
+                        status = "她在想…"
                     case "warn":
                         if let t = e.text { toast = t; hideToastSoon() }
                     case "error":
@@ -156,6 +201,7 @@ struct ContentView: View {
             if !lastSay.isEmpty {
                 rows.append(ChatRow(t: "", role: "assistant", text: lastSay))
             }
+            live = ""
             status = ""
         } catch {
             status = "发不出去：" + error.localizedDescription

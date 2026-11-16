@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import UniformTypeIdentifiers
 
 /// 手机 = 桌面那间房的一扇窗：看见她说的，把话发过去。
 /// 这里不审批工具、不改设置、不干活。
@@ -14,6 +16,10 @@ struct ContentView: View {
     @State private var live = ""      // 正在逐字吐出来的那句
     @State private var think = ""     // 这一轮的思考全文
     @State private var thinkOpen = false
+    @State private var pick: PhotosPickerItem?
+    @State private var fileOpen = false
+    @State private var pendingName = ""
+    @State private var pendingData: Data?
 
     private var api: ChatAPI { ChatAPI(base: base, token: token) }
 
@@ -79,8 +85,9 @@ struct ContentView: View {
         let mine = (r.role == "user")
         return HStack {
             if mine { Spacer(minLength: 40) }
-            Text(r.text)
+            Text(linkified(r.text))
                 .font(.system(size: 15))
+                .textSelection(.enabled)
                 .padding(.horizontal, 12).padding(.vertical, 9)
                 .background(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -123,7 +130,30 @@ struct ContentView: View {
     }
 
     private var inputBar: some View {
+        VStack(spacing: 6) {
+        if !pendingName.isEmpty {
+            HStack(spacing: 6) {
+                Image(systemName: "paperclip").font(.system(size: 11))
+                Text(pendingName).font(.system(size: 12)).lineLimit(1)
+                Button { pendingName = ""; pendingData = nil } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 12))
+                }
+                Spacer()
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+        }
         HStack(spacing: 8) {
+            PhotosPicker(selection: $pick, matching: .images) {
+                Image(systemName: "photo").font(.system(size: 16))
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(Color.white.opacity(0.08)))
+            }
+            Button { fileOpen = true } label: {
+                Image(systemName: "folder").font(.system(size: 15))
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(Color.white.opacity(0.08)))
+            }
             TextField("说一句…", text: $draft, axis: .vertical)
                 .lineLimit(1...4)
                 .textFieldStyle(.plain)
@@ -143,6 +173,11 @@ struct ContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color(red: 0.05, green: 0.06, blue: 0.08))
+        }
+        .onChange(of: pick) { _ in Task { await takePick() } }
+        .fileImporter(isPresented: $fileOpen, allowedContentTypes: [.item], allowsMultipleSelection: false) { res in
+            Task { await takeFile(res) }
+        }
     }
 
     private func load() async {
@@ -166,7 +201,15 @@ struct ContentView: View {
         thinkOpen = false
         status = "她在想…"
         do {
-            let turn = try await api.say(text)
+            var att: [String] = []
+            if let d = pendingData, !pendingName.isEmpty {
+                status = "传附件…"
+                let p = try await api.attach(name: pendingName, data: d)
+                att = [p]
+                pendingData = nil
+                pendingName = ""
+            }
+            let turn = try await api.say(text, attach: att)
             var since = 0
             var lastSay = ""
             for _ in 0..<180 {
@@ -207,6 +250,54 @@ struct ContentView: View {
             status = "发不出去：" + error.localizedDescription
         }
         busy = false
+    }
+
+    private func linkified(_ s: String) -> AttributedString {
+        var a = AttributedString(s)
+        var rest = a.startIndex..<a.endIndex
+        while let r = a[rest].range(of: "http") {
+            let tail = a[r.lowerBound..<a.endIndex].characters.map(String.init).joined()
+            var end = tail.count
+            for (i, ch) in tail.enumerated() {
+                if ch == " " || ch == "
+" || ch == "，" || ch == "。" { end = i; break }
+            }
+            let start = a.index(r.lowerBound, offsetByCharacters: 0)
+            let stop = a.index(r.lowerBound, offsetByCharacters: end)
+            if let href = URL(string: String(a[start..<stop].characters)) {
+                a[start..<stop].link = href
+                a[start..<stop].underlineStyle = .single
+            }
+            rest = stop..<a.endIndex
+        }
+        return a
+    }
+
+    private func takePick() async {
+        guard let item = pick else { return }
+        defer { pick = nil }
+        do {
+            guard let d = try await item.loadTransferable(type: Data.self) else { return }
+            pendingData = d
+            pendingName = UUID().uuidString.prefix(8) + ".jpg"
+        } catch {
+            toast = "这张图读不出来"
+            hideToastSoon()
+        }
+    }
+
+    private func takeFile(_ res: Result<[URL], Error>) async {
+        guard case .success(let urls) = res, let u = urls.first else { return }
+        let scoped = u.startAccessingSecurityScopedResource()
+        defer { if scoped { u.stopAccessingSecurityScopedResource() } }
+        do {
+            let d = try Data(contentsOf: u)
+            pendingData = d
+            pendingName = u.lastPathComponent
+        } catch {
+            toast = "这个文件读不出来"
+            hideToastSoon()
+        }
     }
 
     private func hideToastSoon() {

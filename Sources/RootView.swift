@@ -40,6 +40,14 @@ struct RoomTab: View {
     @State private var wakeNote: String?
     @State private var drag: CGSize = .zero
     @State private var loading = true
+    @State private var cam = 0
+    private let cams: [(String, CGFloat, CGSize)] = [
+        ("全景", 1.00, CGSize(width: 0, height: 0)),
+        ("窗边", 1.55, CGSize(width: -0.16, height: -0.02)),
+        ("床前", 1.60, CGSize(width: 0.16, height: 0.03)),
+        ("门口", 1.55, CGSize(width: -0.05, height: -0.03)),
+        ("相框", 1.95, CGSize(width: -0.03, height: 0.10))
+    ]
 
     private var api: ChatAPI { ChatAPI(base: base, token: token) }
 
@@ -60,8 +68,10 @@ struct RoomTab: View {
                         .resizable()
                         .scaledToFill()
                         .frame(width: geo.size.width * 1.08, height: geo.size.height)
+                        .scaleEffect(cams[cam].1, anchor: .center)
                         .clipped()
-                        .offset(x: drag.width, y: drag.height)
+                        .offset(x: drag.width + cams[cam].2.width * geo.size.width,
+                                y: drag.height + cams[cam].2.height * geo.size.height)
                         .gesture(
                             DragGesture()
                                 .onChanged { v in
@@ -99,12 +109,6 @@ struct RoomTab: View {
                             Text(subtitle()).font(.system(size: 12)).opacity(0.6)
                         }
                         Spacer()
-                        Button {
-                            Task { await load(force: true) }
-                        } label: {
-                            Image(systemName: "arrow.clockwise").font(.system(size: 15))
-                                .padding(8).background(.ultraThinMaterial, in: Circle())
-                        }
                     }
                     .padding(.horizontal, 18).padding(.top, 8)
                     Spacer()
@@ -112,7 +116,34 @@ struct RoomTab: View {
 
                 VStack {
                     Spacer()
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(0..<cams.count, id: \.self) { i in
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.5)) { cam = i }
+                                } label: {
+                                    Text(cams[i].0)
+                                        .font(.system(size: 12))
+                                        .padding(.horizontal, 12).padding(.vertical, 7)
+                                        .background(cam == i
+                                                    ? Color(red: 0.98, green: 0.80, blue: 0.54).opacity(0.92)
+                                                    : Color.white.opacity(0.10),
+                                                    in: Capsule())
+                                        .foregroundStyle(cam == i
+                                                         ? Color(red: 0.16, green: 0.12, blue: 0.08)
+                                                         : Color.white.opacity(0.85))
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                    .padding(.bottom, 6)
                     HStack(spacing: 10) {
+                        Button { Task { await load(force: true) } } label: {
+                            Image(systemName: "arrow.clockwise").font(.system(size: 14))
+                                .padding(13).background(.ultraThinMaterial, in: Circle())
+                                .foregroundStyle(.white)
+                        }
                         Button { onSay() } label: {
                             Text("说话")
                                 .font(.system(size: 16, weight: .semibold))

@@ -1,201 +1,334 @@
 import SwiftUI
+import UIKit
 
-/// 三个页签：聊天（原生）、房间（手机网页那套）、设置（写到电脑那边）。
+/// 三个页签：聊天 / 房间 / 设置。
+/// 房间页是原生的——一张房间图 + 四个热点，不塞网页。
 struct RootView: View {
+    @State private var tab = 0
+
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             ContentView()
                 .tabItem { Label("聊天", systemImage: "bubble.left.and.bubble.right") }
-            RoomTab()
+                .tag(0)
+
+            RoomTab(onSay: { tab = 0 })
                 .tabItem { Label("房间", systemImage: "house") }
+                .tag(1)
+
             SettingsTab()
-                .tabItem { Label("设置", systemImage: "slider.horizontal.3") }
+                .tabItem { Label("设置", systemImage: "gearshape") }
+                .tag(2)
         }
         .tint(Color(red: 0.96, green: 0.72, blue: 0.36))
         .preferredColorScheme(.dark)
     }
 }
 
-/// 房间页：就是手机上那个 /m 页面，原样装进来。
+// MARK: - 房间（原生）
+
 struct RoomTab: View {
-    @AppStorage("room_base") private var base: String = "http://192.168.0.233:8099"
-    @AppStorage("room_token") private var token: String = ""
+    var onSay: () -> Void
 
-    @State private var loading = false
-    @State private var failed = false
-    @State private var reload = 0
+    @AppStorage("room_base") private var base = "http://192.168.0.233:8099"
+    @AppStorage("room_token") private var token = ""
 
-    private var url: URL {
-        let api = ChatAPI(base: base, token: token)
-        return (try? api.roomURL(path: "/m")) ?? URL(string: "about:blank")!
-    }
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            WebView(url: url, isLoading: $loading, failed: $failed, reloadToken: reload)
-            HStack {
-                if loading { ProgressView().scaleEffect(0.7) }
-                Spacer()
-                Button {
-                    reload += 1
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14, weight: .semibold))
-                        .padding(8)
-                        .background(.ultraThinMaterial, in: Circle())
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 6)
-            if failed {
-                VStack(spacing: 6) {
-                    Text("没打开").font(.footnote)
-                    Text(base).font(.caption2).foregroundStyle(.secondary)
-                }
-                .padding(12)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-            }
-        }
-    }
-}
-
-/// 设置页：读写电脑那边的 /api/settings，改完那边立刻生效。
-struct SettingsTab: View {
-    @AppStorage("room_base") private var base: String = "http://192.168.0.233:8099"
-    @AppStorage("room_token") private var token: String = ""
-
-    @State private var aiName = ""
-    @State private var userName = ""
-    @State private var lifeOn = true
-    @State private var wechatOn = true
-    @State private var wechatMax = "3"
-    @State private var quietText = "23:30–07:30"
-    @State private var persona = ""
-
-    @State private var loading = false
-    @State private var saving = false
-    @State private var note = ""
+    @State private var img: UIImage?
+    @State private var failed = ""
+    @State private var tip = ""
+    @State private var tipOn = false
+    @State private var wakeNote: String?
+    @State private var drag: CGSize = .zero
+    @State private var loading = true
 
     private var api: ChatAPI { ChatAPI(base: base, token: token) }
 
+    private let hots: [(String, String, CGFloat, CGFloat)] = [
+        ("床", "床铺得平平的。被子边角压了一下，是他昨晚起夜时蹭的。", 0.17, 0.46),
+        ("相框", "墙上那个相框里是今天的桌面——一小时一张，我看着它换。", 0.53, 0.24),
+        ("门", "门关着，门缝底下有一线暖光漏出来。", 0.72, 0.40),
+        ("椅子", "椅子还在桌边，靠背朝我。他走的时候没推回去。", 0.87, 0.56),
+    ]
+
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("连接") {
-                    TextField("房间地址", text: $base)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                    SecureField("口令", text: $token)
-                    Button("用这些连一次") { Task { await load() } }
-                        .disabled(loading || token.isEmpty)
+        GeometryReader { geo in
+            ZStack {
+                Color(red: 0.07, green: 0.09, blue: 0.12).ignoresSafeArea()
+
+                if let img {
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geo.size.width * 1.08, height: geo.size.height)
+                        .clipped()
+                        .offset(x: drag.width, y: drag.height)
+                        .gesture(
+                            DragGesture()
+                                .onChanged { v in
+                                    drag = CGSize(width: max(-26, min(26, v.translation.width * 0.35)),
+                                                  height: max(-18, min(18, v.translation.height * 0.22)))
+                                }
+                                .onEnded { _ in
+                                    withAnimation(.easeOut(duration: 0.22)) { drag = .zero }
+                                }
+                        )
+                        .onTapGesture(count: 2) {
+                            withAnimation(.easeOut(duration: 0.22)) { drag = .zero }
+                        }
+                } else if loading {
+                    ProgressView().tint(.white.opacity(0.6))
                 }
 
-                Section {
-                    Toggle("她有她的生活", isOn: $lifeOn)
-                    Text("开着：会主动开口、有自己的心事、心情会变。关掉：只陪你说话，不主动。")
-                        .font(.caption2).foregroundStyle(.secondary)
-                } header: {
-                    Text("生活")
-                }
-
-                Section {
-                    Toggle("允许往外部发消息（微信）", isOn: $wechatOn)
-                    HStack {
-                        Text("一小时最多")
-                        TextField("3", text: $wechatMax)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                        Text("条")
-                    }
-                } header: {
-                    Text("对外")
-                }
-
-                Section {
-                    TextField("23:30–07:30", text: $quietText)
-                    Text("这两个点之间她不主动说话。格式照上面写。")
-                        .font(.caption2).foregroundStyle(.secondary)
-                } header: {
-                    Text("静默时段")
-                }
-
-                Section {
-                    TextField("我叫", text: $aiName)
-                    TextField("叫你", text: $userName)
-                } header: {
-                    Text("称呼")
-                }
-
-                Section {
-                    TextEditor(text: $persona)
-                        .frame(minHeight: 88)
-                    Text("会贴在提示词最后，最多 600 字。")
-                        .font(.caption2).foregroundStyle(.secondary)
-                } header: {
-                    Text("让她记着的话")
-                }
-
-                Section {
+                ForEach(hots, id: \.0) { hot in
                     Button {
-                        Task { await save() }
+                        show(hot.1)
                     } label: {
-                        HStack {
-                            Spacer()
-                            if saving { ProgressView().scaleEffect(0.8) }
-                            Text(saving ? "正在保存" : "保存到房间").bold()
-                            Spacer()
+                        Text(hot.0)
+                            .font(.system(size: 12))
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .overlay(Capsule().stroke(Color.white.opacity(0.16), lineWidth: 0.6))
+                    }
+                    .position(x: geo.size.width * hot.2, y: geo.size.height * hot.3)
+                }
+
+                VStack {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("房间").font(.system(size: 20, weight: .semibold))
+                            Text(subtitle()).font(.system(size: 12)).opacity(0.6)
+                        }
+                        Spacer()
+                        Button {
+                            Task { await load(force: true) }
+                        } label: {
+                            Image(systemName: "arrow.clockwise").font(.system(size: 15))
+                                .padding(8).background(.ultraThinMaterial, in: Circle())
                         }
                     }
-                    .disabled(saving)
-                    if !note.isEmpty {
-                        Text(note).font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, 18).padding(.top, 8)
+                    Spacer()
+                }
+
+                VStack {
+                    Spacer()
+                    HStack(spacing: 10) {
+                        Button { onSay() } label: {
+                            Text("说话")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(maxWidth: .infinity).padding(.vertical, 15)
+                                .background(Color(red: 0.98, green: 0.80, blue: 0.54), in: Capsule())
+                                .foregroundStyle(Color(red: 0.16, green: 0.12, blue: 0.08))
+                        }
+                        Button { Task { await knock() } } label: {
+                            Text("叫醒")
+                                .font(.system(size: 15))
+                                .padding(.horizontal, 22).padding(.vertical, 15)
+                                .background(.ultraThinMaterial, in: Capsule())
+                                .foregroundStyle(.white)
+                        }
                     }
-                    Text("存的是电脑那边同一个文件，浏览器和 App 看到的是同一份。")
-                        .font(.caption2).foregroundStyle(.secondary)
+                    .padding(.horizontal, 16).padding(.bottom, 12)
+                }
+
+                if tipOn {
+                    VStack {
+                        Spacer()
+                        Text(tip)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .padding(.horizontal, 14).padding(.vertical, 11)
+                            .background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 14))
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 88)
+                    }
+                    .transition(.opacity)
+                }
+
+                if !failed.isEmpty {
+                    Text(failed)
+                        .font(.system(size: 12)).multilineTextAlignment(.center)
+                        .padding(14).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                        .padding(.horizontal, 30)
+                }
+
+                if let note = wakeNote {
+                    VStack {
+                        Text(note).font(.system(size: 12))
+                            .padding(.horizontal, 14).padding(.vertical, 9)
+                            .background(.ultraThinMaterial, in: Capsule())
+                        Spacer()
+                    }
+                    .padding(.top, 70)
                 }
             }
-            .navigationTitle("设置")
-            .task { if !token.isEmpty { await load() } }
+        }
+        .task { if img == nil { await load() } }
+    }
+
+    private func subtitle() -> String {
+        let h = Calendar.current.component(.hour, from: Date())
+        if h >= 18 || h < 7 { return "夜里也亮着一盏" }
+        if h < 11 { return "窗开着，光在地板上" }
+        if h < 16 { return "下午，屋里安安静静" }
+        return "太阳往窗台那边挪了"
+    }
+
+    private func show(_ s: String) {
+        tip = s
+        withAnimation(.easeOut(duration: 0.2)) { tipOn = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            withAnimation(.easeIn(duration: 0.25)) { tipOn = false }
         }
     }
 
-    private func load() async {
-        loading = true
+    private func load(force: Bool = false) async {
+        guard !token.isEmpty else { failed = "先在设置里填地址和口令"; loading = false; return }
+        loading = true; failed = ""
         do {
-            let s = try await api.settings()
-            aiName = s.ai_name
-            userName = s.user_name
-            lifeOn = s.life_on
-            wechatOn = s.wechat_on
-            wechatMax = String(s.wechat_max_per_hour)
-            quietText = s.quiet_text
-            persona = s.persona_extra
-            note = "已读到电脑那边的设置"
+            let u = try api.roomURL(path: "/web/room-bg.jpg")
+            var req = URLRequest(url: u)
+            req.timeoutInterval = 25
+            req.cachePolicy = .reloadIgnoringLocalCacheData
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
+                throw NSError(domain: "room", code: http.statusCode,
+                              userInfo: [NSLocalizedDescriptionKey: "图片 HTTP \(http.statusCode)"])
+            }
+            if let im = UIImage(data: data) { img = im } else { failed = "这张图打不开" }
         } catch {
-            note = "读不到：" + error.localizedDescription
+            failed = "房间图没拉下来\n\(error.localizedDescription)"
         }
         loading = false
     }
 
+    private func knock() async {
+        do {
+            struct Out: Decodable { var ok: Bool?; var note: String?; var err: String? }
+            var req = URLRequest(url: try api.roomURL(path: "/api/wake"))
+            req.httpMethod = "POST"
+            req.timeoutInterval = 25
+            req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+            req.httpBody = Data("{}".utf8)
+            let (data, _) = try await URLSession.shared.data(for: req)
+            let out = try JSONDecoder().decode(Out.self, from: data)
+            wakeNote = out.ok == true ? "叫了一声，她醒了" : (out.err ?? "没叫醒")
+        } catch {
+            wakeNote = "没叫醒：\(error.localizedDescription)"
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { wakeNote = nil }
+    }
+}
+
+// MARK: - 设置
+
+struct SettingsTab: View {
+    @AppStorage("room_base") private var base = "http://192.168.0.233:8099"
+    @AppStorage("room_token") private var token = ""
+
+    @State private var lifeOn = true
+    @State private var wechatOn = true
+    @State private var wechatMax = 3
+    @State private var quiet = "23:30–07:30"
+    @State private var aiName = "阿潜"
+    @State private var userName = "老大"
+    @State private var persona = ""
+    @State private var note = ""
+    @State private var busy = false
+
+    private var api: ChatAPI { ChatAPI(base: base, token: token) }
+
+    var body: some View {
+        Form {
+            Section("连哪间房") {
+                TextField("地址", text: $base)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                SecureField("口令", text: $token)
+                Button {
+                    Task { await load() }
+                } label: { Text(busy ? "正在连…" : "用这些连一次，读回现在的设置") }
+                .disabled(busy)
+            }
+
+            Section {
+                Toggle("她有她的生活", isOn: $lifeOn)
+            } header: { Text("生活") } footer: {
+                Text("开着：她会有心情、自己找事做、也会主动来找你。关掉：只陪你说话，不自己忙。")
+            }
+
+            Section("对外") {
+                Toggle("允许往外发消息（微信）", isOn: $wechatOn)
+                Stepper("一小时最多 \(wechatMax) 条", value: $wechatMax, in: 0...10)
+            }
+
+            Section {
+                TextField("23:30–07:30", text: $quiet)
+            } header: { Text("静默时段") } footer: {
+                Text("这两个点之间她不主动说话。写成 23:30–07:30 这样。")
+            }
+
+            Section("称呼") {
+                TextField("我叫", text: $aiName)
+                TextField("叫你", text: $userName)
+            }
+
+            Section {
+                TextEditor(text: $persona).frame(minHeight: 110)
+            } header: { Text("让她记着的话") } footer: {
+                Text("会贴在提示词最后，最多 600 字。存的是电脑那边同一个文件。")
+            }
+
+            Section {
+                Button {
+                    Task { await save() }
+                } label: { Text(busy ? "保存中…" : "保存到房间").frame(maxWidth: .infinity) }
+                .disabled(busy)
+                if !note.isEmpty {
+                    Text(note).font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+            } footer: {
+                Text("改完点保存，电脑那边的房间和网页立刻生效，不用重启。")
+            }
+        }
+        .task { if !token.isEmpty { await load() } }
+    }
+
+    private func load() async {
+        busy = true; defer { busy = false }
+        do {
+            let s = try await api.settings()
+            lifeOn = s.life_on
+            wechatOn = s.wechat_on
+            wechatMax = s.wechat_max_per_hour
+            quiet = s.quiet_text
+            aiName = s.ai_name
+            userName = s.user_name
+            persona = s.persona_extra
+            note = "读到了，改完点保存"
+        } catch {
+            note = "连不上：\(error.localizedDescription)"
+        }
+    }
+
     private func save() async {
-        saving = true
-        defer { saving = false }
-        let q = SettingsPayload.parseQuiet(quietText)
+        busy = true; defer { busy = false }
         var body: [String: Any] = [
-            "ai_name": aiName,
-            "user_name": userName,
             "life_on": lifeOn,
             "wechat_on": wechatOn,
-            "persona_extra": persona,
+            "wechat_max_per_hour": wechatMax,
+            "ai_name": aiName,
+            "user_name": userName,
+            "persona_extra": String(persona.prefix(600)),
         ]
-        if let n = Int(wechatMax) { body["wechat_max_per_hour"] = n }
-        if let q { body["quiet"] = q }
+        if let q = SettingsPayload.parseQuiet(quiet) { body["quiet"] = q }
         do {
-            _ = try await api.saveSettings(body)
-            note = "已保存，电脑那边立即生效"
+            let s = try await api.saveSettings(body)
+            lifeOn = s.life_on; wechatOn = s.wechat_on; wechatMax = s.wechat_max_per_hour
+            quiet = s.quiet_text; aiName = s.ai_name; userName = s.user_name; persona = s.persona_extra
+            note = "已保存 · \(Date().formatted(date: .omitted, time: .shortened))"
         } catch {
-            note = "存不上：" + error.localizedDescription
+            note = "没存上：\(error.localizedDescription)"
         }
     }
 }

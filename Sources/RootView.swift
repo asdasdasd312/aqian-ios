@@ -33,7 +33,6 @@ struct RoomTab: View {
     var body: some View {
         ZStack(alignment: .top) {
             WebView(url: url, isLoading: $loading, failed: $failed, reloadToken: reload)
-                .ignoresSafeArea(edges: .bottom)
             HStack {
                 if loading { ProgressView().scaleEffect(0.7) }
                 Spacer()

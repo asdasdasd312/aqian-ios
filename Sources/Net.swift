@@ -110,13 +110,15 @@ struct ChatAPI {
         return w.rows.map { ChatRow(t: $0.t, role: $0.role, text: $0.text) }
     }
 
-    func say(_ text: String) async throws -> String {
+    func say(_ text: String, attach: [String] = []) async throws -> String {
         struct Out: Decodable { var turn: String?; var err: String? }
         var req = URLRequest(url: try url("/api/say"))
         req.httpMethod = "POST"
         req.timeoutInterval = 30
         req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["text": text])
+        var body: [String: Any] = ["text": text]
+        if !attach.isEmpty { body["attach"] = attach }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, resp) = try await URLSession.shared.data(for: req)
         if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
             throw NSError(domain: "room", code: http.statusCode,
@@ -126,6 +128,26 @@ struct ChatAPI {
         if let t = out.turn, !t.isEmpty { return t }
         throw NSError(domain: "room", code: 1,
                       userInfo: [NSLocalizedDescriptionKey: out.err ?? "没拿到 turn"])
+    }
+
+    /// 把一张图/一个文件先塞进房间的收件箱，返回它在那边的绝对路径。
+    func attach(name: String, data: Data) async throws -> String {
+        struct Out: Decodable { var ok: Bool?; var path: String?; var err: String? }
+        var req = URLRequest(url: try url("/api/attach"))
+        req.httpMethod = "POST"
+        req.timeoutInterval = 60
+        req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        let b64 = "data:application/octet-stream;base64," + data.base64EncodedString()
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["name": name, "b64": b64])
+        let (raw, resp) = try await URLSession.shared.data(for: req)
+        if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
+            throw NSError(domain: "room", code: http.statusCode,
+                          userInfo: [NSLocalizedDescriptionKey: "附件没传上（HTTP \(http.statusCode)）"])
+        }
+        let out = try JSONDecoder().decode(Out.self, from: raw)
+        if let p = out.path, !p.isEmpty { return p }
+        throw NSError(domain: "room", code: 1,
+                      userInfo: [NSLocalizedDescriptionKey: out.err ?? "附件没落盘"])
     }
 
     /// 给 WKWebView 用的地址（URLComponents 会帮忙把 t 编码好）。

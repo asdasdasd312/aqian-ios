@@ -73,7 +73,7 @@ struct ContentView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 12)
             }
-            .onChange(of: rows.count) { _, _ in
+            .onChange(of: rows.count) { _ in
                 if let last = rows.last { withAnimation { sp.scrollTo(last.id, anchor: .bottom) } }
             }
         }

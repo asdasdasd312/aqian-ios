@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 /// 手机 = 桌面那间房的一扇窗：看见她说的，把话发过去。
 /// 这里不审批工具、不改设置、不干活。
 struct ContentView: View {
+    @EnvironmentObject private var theme: ThemeStore
     @AppStorage("room_base") private var base: String = "http://192.168.0.233:8099"
     @AppStorage("room_token") private var token: String = ""
 
@@ -31,9 +32,21 @@ struct ContentView: View {
                 flow
                 inputBar
             }
-            .background(Color(red: 0.06, green: 0.07, blue: 0.09).ignoresSafeArea())
+            .background(
+                ZStack {
+                    theme.palette.bg.color
+                    RadialGradient(gradient: Gradient(colors: [theme.palette.glow.color.opacity(theme.palette.ga), theme.palette.glow.color.opacity(0)]),
+                                   center: UnitPoint(x: theme.palette.gx / 100, y: theme.palette.gy / 100),
+                                   startRadius: 0, endRadius: 520)
+                }.ignoresSafeArea()
+            )
             .toolbar(.hidden, for: .navigationBar)
-            .task { if !token.isEmpty { await load() } }
+            .task {
+                if !token.isEmpty {
+                    if let h = try? await api.roomHour() { theme.setRoomHour(h) }
+                    await load()
+                }
+            }
             .overlay(alignment: .top) {
                 if !toast.isEmpty {
                     Text(toast)
@@ -44,7 +57,7 @@ struct ContentView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(theme.isDay ? .light : .dark)
     }
 
     private var header: some View {
@@ -91,8 +104,7 @@ struct ContentView: View {
                 .padding(.horizontal, 12).padding(.vertical, 9)
                 .background(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(mine ? Color(red: 0.16, green: 0.36, blue: 0.62)
-                                   : Color(red: 0.11, green: 0.13, blue: 0.17))
+                        .fill(mine ? theme.palette.me.color : theme.palette.her.color)
                 )
                 .foregroundStyle(.white)
             if !mine { Spacer(minLength: 40) }
@@ -147,32 +159,32 @@ struct ContentView: View {
             PhotosPicker(selection: $pick, matching: .images) {
                 Image(systemName: "photo").font(.system(size: 16))
                     .frame(width: 34, height: 34)
-                    .background(Circle().fill(Color.white.opacity(0.08)))
+                    .background(Circle().fill(theme.palette.line.color.opacity(theme.isDay ? 0.55 : 0.65)))
             }
             Button { fileOpen = true } label: {
                 Image(systemName: "folder").font(.system(size: 15))
                     .frame(width: 34, height: 34)
-                    .background(Circle().fill(Color.white.opacity(0.08)))
+                    .background(Circle().fill(theme.palette.line.color.opacity(theme.isDay ? 0.55 : 0.65)))
             }
             TextField("说一句…", text: $draft, axis: .vertical)
                 .lineLimit(1...4)
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 12).padding(.vertical, 9)
-                .background(RoundedRectangle(cornerRadius: 18).fill(Color.white.opacity(0.08)))
+                .background(RoundedRectangle(cornerRadius: 18).fill(theme.palette.line.color.opacity(theme.isDay ? 0.55 : 0.65)))
                 .disabled(busy)
             Button { Task { await send() } } label: {
                 Image(systemName: busy ? "hourglass" : "arrow.up")
                     .font(.system(size: 15, weight: .bold))
                     .frame(width: 38, height: 38)
                     .background(Circle().fill(busy ? Color.gray.opacity(0.5)
-                                                   : Color(red: 0.96, green: 0.72, blue: 0.36)))
+                                                   : theme.palette.accent.color))
                     .foregroundStyle(.black)
             }
             .disabled(busy || draft.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color(red: 0.05, green: 0.06, blue: 0.08))
+        .background(theme.palette.card.color)
         }
         .onChange(of: pick) { _ in Task { await takePick() } }
         .fileImporter(isPresented: $fileOpen, allowedContentTypes: [.item], allowsMultipleSelection: false) { res in

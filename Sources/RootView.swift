@@ -4,6 +4,7 @@ import UIKit
 /// 三个页签：聊天 / 房间 / 设置。
 /// 房间页是原生的——一张房间图 + 四个热点，不塞网页。
 struct RootView: View {
+    @EnvironmentObject private var theme: ThemeStore
     @State private var tab = 0
 
     var body: some View {
@@ -20,14 +21,15 @@ struct RootView: View {
                 .tabItem { Label("设置", systemImage: "gearshape") }
                 .tag(2)
         }
-        .tint(Color(red: 0.96, green: 0.72, blue: 0.36))
-        .preferredColorScheme(.dark)
+        .tint(theme.palette.accent.color)
+        .preferredColorScheme(theme.isDay ? .light : .dark)
     }
 }
 
 // MARK: - 房间（原生）
 
 struct RoomTab: View {
+    @EnvironmentObject private var theme: ThemeStore
     var onSay: () -> Void
 
     @AppStorage("room_base") private var base = "http://192.168.0.233:8099"
@@ -61,7 +63,7 @@ struct RoomTab: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Color(red: 0.07, green: 0.09, blue: 0.12).ignoresSafeArea()
+                theme.palette.bg.color.ignoresSafeArea()
 
                 if let img {
                     Image(uiImage: img)
@@ -126,11 +128,11 @@ struct RoomTab: View {
                                         .font(.system(size: 12))
                                         .padding(.horizontal, 12).padding(.vertical, 7)
                                         .background(cam == i
-                                                    ? Color(red: 0.98, green: 0.80, blue: 0.54).opacity(0.92)
+                                                    ? theme.palette.accent.color.opacity(0.92)
                                                     : Color.white.opacity(0.10),
                                                     in: Capsule())
                                         .foregroundStyle(cam == i
-                                                         ? Color(red: 0.16, green: 0.12, blue: 0.08)
+                                                         ? theme.palette.bg.color
                                                          : Color.white.opacity(0.85))
                                 }
                             }
@@ -148,8 +150,8 @@ struct RoomTab: View {
                             Text("说话")
                                 .font(.system(size: 16, weight: .semibold))
                                 .frame(maxWidth: .infinity).padding(.vertical, 15)
-                                .background(Color(red: 0.98, green: 0.80, blue: 0.54), in: Capsule())
-                                .foregroundStyle(Color(red: 0.16, green: 0.12, blue: 0.08))
+                                .background(theme.palette.accent.color, in: Capsule())
+                                .foregroundStyle(theme.palette.bg.color)
                         }
                         Button { Task { await knock() } } label: {
                             Text("叫醒")
@@ -254,6 +256,7 @@ struct RoomTab: View {
 // MARK: - 设置
 
 struct SettingsTab: View {
+    @EnvironmentObject private var theme: ThemeStore
     @AppStorage("room_base") private var base = "http://192.168.0.233:8099"
     @AppStorage("room_token") private var token = ""
 
@@ -271,6 +274,20 @@ struct SettingsTab: View {
 
     var body: some View {
         Form {
+            Section {
+                Picker("颜色", selection: Binding(
+                    get: { theme.mode },
+                    set: { theme.setMode($0) }
+                )) {
+                    Text("跟屋子的钟").tag("auto")
+                    Text("白天").tag("day")
+                    Text("夜里").tag("night")
+                }
+                .pickerStyle(.segmented)
+            } header: { Text("这间屋子什么样") } footer: {
+                Text("自动档看屋子那边的钟：06:30 之后算白天，18:30 之后算夜里。换档时会走一遍 1.2 秒的光。")
+            }
+
             Section("连哪间房") {
                 TextField("地址", text: $base)
                     .textInputAutocapitalization(.never)

@@ -10,7 +10,6 @@ struct ContentView: View {
     @State private var draft: String = ""
     @State private var busy = false
     @State private var status = ""
-    @State private var showSettings = false
     @State private var toast = ""
 
     private var api: ChatAPI { ChatAPI(base: base, token: token) }
@@ -25,12 +24,7 @@ struct ContentView: View {
             }
             .background(Color(red: 0.06, green: 0.07, blue: 0.09).ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showSettings) {
-                SettingsView(base: $base, token: $token) {
-                    Task { await load() }
-                }
-            }
-            .task { if token.isEmpty { showSettings = true } else { await load() } }
+            .task { if !token.isEmpty { await load() } }
             .overlay(alignment: .top) {
                 if !toast.isEmpty {
                     Text(toast)
@@ -50,9 +44,6 @@ struct ContentView: View {
             Text("阿潜").font(.system(size: 16, weight: .semibold))
             Spacer()
             Text("只是窗").font(.caption).foregroundStyle(.secondary)
-            Button { showSettings = true } label: {
-                Image(systemName: "slider.horizontal.3").font(.system(size: 15))
-            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)

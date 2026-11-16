@@ -253,24 +253,25 @@ struct ContentView: View {
     }
 
     private func linkified(_ s: String) -> AttributedString {
-        var a = AttributedString(s)
-        var rest = a.startIndex..<a.endIndex
-        while let r = a[rest].range(of: "http") {
-            let tail = a[r.lowerBound..<a.endIndex].characters.map(String.init).joined()
-            var end = tail.count
-            for (i, ch) in tail.enumerated() {
-                if ch == " " || ch == "
-" || ch == "，" || ch == "。" { end = i; break }
+        var out = AttributedString()
+        var rest = Substring(s)
+        while let r = rest.range(of: "http") {
+            out += AttributedString(String(rest[rest.startIndex..<r.lowerBound]))
+            var end = rest.endIndex
+            var i = r.lowerBound
+            while i < rest.endIndex {
+                let ch = rest[i]
+                if ch == " " || ch.isNewline || ch == "，" || ch == "。" { end = i; break }
+                i = rest.index(after: i)
             }
-            let start = a.index(r.lowerBound, offsetByCharacters: 0)
-            let stop = a.index(r.lowerBound, offsetByCharacters: end)
-            if let href = URL(string: String(a[start..<stop].characters)) {
-                a[start..<stop].link = href
-                a[start..<stop].underlineStyle = .single
-            }
-            rest = stop..<a.endIndex
+            let raw = String(rest[r.lowerBound..<end])
+            var piece = AttributedString(raw)
+            if let u = URL(string: raw) { piece.link = u; piece.underlineStyle = .single }
+            out += piece
+            rest = rest[end...]
         }
-        return a
+        out += AttributedString(String(rest))
+        return out
     }
 
     private func takePick() async {
